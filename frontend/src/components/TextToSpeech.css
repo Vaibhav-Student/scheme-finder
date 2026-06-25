@@ -1,0 +1,55 @@
+.tts-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full);
+  padding: 4px 8px;
+}
+
+.tts-btn {
+  min-height: 34px;
+  min-width: 34px;
+  padding: 6px;
+  border-radius: 50%;
+}
+
+.tts-speed {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  padding: 4px 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+.tts-speed option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.tts-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success-raw);
+  animation: pulse 1s infinite;
+  margin-left: 4px;
+}
+
+.tts-unsupported {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}

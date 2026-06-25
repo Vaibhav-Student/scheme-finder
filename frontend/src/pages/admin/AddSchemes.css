@@ -1,0 +1,79 @@
+/* --- Add Schemes specific styles --- */
+.mode-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+
+.mode-btn {
+  display: flex;
+  align-items: flex-start;
+  padding: var(--spacing-xl);
+  background: var(--bg-surface-solid);
+  border: 2px solid var(--border-light);
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+}
+
+.mode-btn:hover {
+  border-color: var(--color-primary-raw);
+  background: var(--bg-surface-elevated);
+  transform: translateY(-2px);
+}
+
+.mode-btn.active {
+  border-color: var(--color-primary-raw);
+  background: rgba(99, 102, 241, 0.05);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+.mode-icon {
+  flex-shrink: 0;
+  margin-right: var(--spacing-md);
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
+}
+
+.mode-btn.active .mode-icon {
+  color: var(--color-primary-raw);
+}
+
+.mode-info h3 {
+  font-size: var(--font-size-lg);
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.mode-info p {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.mode-check {
+  position: absolute;
+  top: var(--spacing-xl);
+  right: var(--spacing-xl);
+  color: var(--color-primary-raw);
+}
+
+.add-scheme-form {
+  padding: var(--spacing-xl);
+}
+
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--spacing-sm);
+}
+
+@media (max-width: 768px) {
+  .mode-selector {
+    grid-template-columns: 1fr;
+  }
+}
