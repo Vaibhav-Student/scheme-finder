@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+require('dotenv').config();
 const db = require('./db');
 
 const app = express();
@@ -456,6 +457,211 @@ app.put('/api/users/update', (req, res) => {
       });
     }
   });
+});
+
+// =====================================================
+// AI ASSISTANT — PROXY ENDPOINTS
+// These proxy GNews + AI calls to avoid browser CORS issues
+// =====================================================
+
+const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+
+// --- Fetch news articles ---
+app.get('/api/ai/news', async (req, res) => {
+  const QUERY_POOL = [
+    'India government scheme launched',
+    'India new yojana subsidy announced',
+    'India scholarship welfare program',
+    'pradhan mantri new scheme benefit',
+    'India government benefit registration',
+    'central government yojana eligibility',
+    'India ministry scheme announcement',
+    'state government new scheme subsidy',
+    'India financial assistance program',
+    'India pension scheme welfare update',
+    'India farmers scheme kisan yojana',
+    'India women empowerment scheme benefit',
+    'India housing scheme loan subsidy',
+    'India healthcare scheme insurance',
+    'India education scholarship grant',
+  ];
+
+  // Pick 3 random queries
+  const shuffled = [...QUERY_POOL].sort(() => Math.random() - 0.5);
+  const queries = shuffled.slice(0, 3);
+
+  const allArticles = [];
+
+  for (const q of queries) {
+    try {
+      const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(q)}&lang=en&country=in&max=10&apikey=${GNEWS_API_KEY}`;
+      const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (!response.ok) {
+        console.warn(`[AI News] GNews returned ${response.status} for: "${q}"`);
+        continue;
+      }
+      const data = await response.json();
+      if (data.articles) {
+        for (const a of data.articles) {
+          allArticles.push({
+            title: a.title,
+            content: a.description || a.content || '',
+            url: a.url,
+            source: a.source?.name || 'Unknown',
+            publishedAt: a.publishedAt,
+            image: a.image,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn(`[AI News] GNews fetch failed for: "${q}"`, err.message);
+    }
+  }
+
+  // De-duplicate by URL
+  const seen = new Set();
+  const unique = allArticles.filter((a) => {
+    if (seen.has(a.url)) return false;
+    seen.add(a.url);
+    return true;
+  });
+
+  // Sort newest first
+  unique.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+
+  if (unique.length > 0) {
+    console.log(`[AI News] Fetched ${unique.length} unique articles from GNews`);
+    return res.json({ source: 'gnews', articles: unique });
+  }
+
+  // Fallback: PIB RSS
+  try {
+    const rssUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent('https://pib.gov.in/RssFeed.aspx?MenuId=2&Lang=1&RegDtFrom=&RegDtTo=')}&_cb=${Date.now()}`;
+    const rssRes = await fetch(rssUrl, { signal: AbortSignal.timeout(5000) });
+    if (rssRes.ok) {
+      const rssData = await rssRes.json();
+      if (rssData.items && rssData.items.length > 0) {
+        const articles = rssData.items.slice(0, 10).map((item) => ({
+          title: item.title,
+          content: (item.description || item.content || '').replace(/<[^>]*>/g, ''),
+          url: item.link,
+          source: 'PIB India (Press Information Bureau)',
+          publishedAt: item.pubDate,
+          image: item.thumbnail || null,
+        }));
+        console.log(`[AI News] Fetched ${articles.length} articles from PIB RSS`);
+        return res.json({ source: 'pib_rss', articles });
+      }
+    }
+  } catch (err) {
+    console.warn('[AI News] PIB RSS failed:', err.message);
+  }
+
+  console.warn('[AI News] All sources failed, returning empty');
+  res.json({ source: 'none', articles: [] });
+});
+
+// --- AI Analysis of a headline ---
+app.post('/api/ai/analyze', async (req, res) => {
+  const { prompt } = req.body;
+  if (!prompt) return res.status(400).json({ error: 'prompt is required' });
+
+  // Try Gemini first
+  if (GEMINI_API_KEY) {
+    try {
+      const geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.1, maxOutputTokens: 500 },
+          }),
+          signal: AbortSignal.timeout(10000),
+        }
+      );
+      if (geminiRes.ok) {
+        const data = await geminiRes.json();
+        const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (rawText) {
+          return res.json({ source: 'gemini', text: rawText });
+        }
+      } else {
+        console.warn(`[AI Analyze] Gemini returned ${geminiRes.status}`);
+      }
+    } catch (err) {
+      console.warn('[AI Analyze] Gemini failed:', err.message);
+    }
+  }
+
+  // Try OpenRouter
+  if (OPENROUTER_API_KEY) {
+    try {
+      const orRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.0-flash-exp:free',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1,
+          max_tokens: 500,
+        }),
+        signal: AbortSignal.timeout(12000),
+      });
+      if (orRes.ok) {
+        const data = await orRes.json();
+        const rawText = data?.choices?.[0]?.message?.content || '';
+        if (rawText) {
+          return res.json({ source: 'openrouter', text: rawText });
+        }
+      } else {
+        console.warn(`[AI Analyze] OpenRouter returned ${orRes.status}`);
+      }
+    } catch (err) {
+      console.warn('[AI Analyze] OpenRouter failed:', err.message);
+    }
+  }
+
+  // Both failed
+  console.warn('[AI Analyze] All AI providers failed');
+  res.json({ source: 'none', text: '' });
+});
+
+// =====================================================
+// SCRAPER LOGS API
+// =====================================================
+
+app.get('/api/scraper/logs', (req, res) => {
+  db.all('SELECT * FROM scraper_logs ORDER BY started_at DESC LIMIT 20', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+app.post('/api/scraper/trigger', (req, res) => {
+  // Mocking a scraper trigger event
+  const sources = ['MyScheme.gov.in', 'India.gov.in', 'PIB.gov.in', 'National Scholarship Portal'];
+  const source = sources[Math.floor(Math.random() * sources.length)];
+  const found = Math.floor(Math.random() * 10);
+  const updated = Math.floor(Math.random() * 5);
+  const statuses = ['SUCCESS', 'SUCCESS', 'SUCCESS', 'FAILED'];
+  const status = statuses[Math.floor(Math.random() * statuses.length)];
+  const errMsg = status === 'FAILED' ? 'Connection timeout' : null;
+
+  db.run(
+    'INSERT INTO scraper_logs (source_name, status, schemes_found, schemes_updated, error_message, completed_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+    [source, status, found, updated, errMsg],
+    function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ message: 'Scrape job completed successfully', logId: this.lastID });
+    }
+  );
 });
 
 const PORT = 5000;

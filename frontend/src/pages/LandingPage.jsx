@@ -17,6 +17,7 @@ import {
   FiLinkedin,
   FiMail,
 } from 'react-icons/fi';
+import LogoIcon from '../components/LogoIcon';
 import './LandingPage.css';
 
 function useScrollAnimation() {
@@ -63,7 +64,9 @@ export default function LandingPage() {
       >
         <div className="landing-nav-inner">
           <Link to="/" className="landing-brand">
-            <div className="landing-brand-icon" aria-hidden="true">S</div>
+            <div className="landing-brand-icon" aria-hidden="true">
+              <LogoIcon size={24} />
+            </div>
             <span className="landing-brand-text">Scheme Finder</span>
           </Link>
 

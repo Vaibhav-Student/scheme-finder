@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { FiGrid, FiUser, FiShield, FiLogOut, FiSettings, FiDatabase, FiCheckCircle, FiCpu, FiList, FiUsers, FiSearch, FiFileText } from 'react-icons/fi';
+import LogoIcon from './LogoIcon';
 import './Sidebar.css';
 
 export default function Sidebar({ mobileOpen, setMobileOpen }) {
@@ -14,7 +15,9 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
       <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`} aria-label="Sidebar navigation">
         <div className="sidebar-header">
           <Link to="/dashboard" className="sidebar-brand">
-            <div className="brand-logo" aria-hidden="true">S</div>
+            <div className="brand-logo" aria-hidden="true">
+              <LogoIcon size={24} />
+            </div>
             <span className="brand-text">Schemes</span>
           </Link>
         </div>

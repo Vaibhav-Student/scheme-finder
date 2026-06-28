@@ -3,10 +3,8 @@
 // With Source Verification & Fake News Detection
 // =====================================================
 
-// --- API Keys ---
-// NOTE: In production, these should NEVER be in the frontend.
-const GNEWS_API_KEY = ''; // User must provide their free GNews key
-const GEMINI_API_KEY = ''; // User must provide their Gemini key
+// Backend API base URL
+const API_BASE = 'http://localhost:5000';
 
 // =====================================================
 // OFFICIAL GOVERNMENT SOURCE REGISTRY
@@ -73,130 +71,61 @@ const DEFAULT_VERIFICATION_PORTAL = {
 };
 
 // =====================================================
-// 1. FETCH REAL GOVERNMENT NEWS
+// 1. FETCH REAL GOVERNMENT NEWS (via backend proxy)
 // =====================================================
 export async function fetchRecentNews() {
-  if (GNEWS_API_KEY) {
-    const queries = [
-      'India government scheme launched',
-      'India yojana new scheme subsidy',
-      'India scholarship welfare program 2026',
-    ];
-
-    const allArticles = [];
-
-    for (const q of queries) {
-      try {
-        const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(q)}&lang=en&country=in&max=5&apikey=${GNEWS_API_KEY}`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-        if (!res.ok) continue;
-        const data = await res.json();
-        if (data.articles) {
-          for (const a of data.articles) {
-            allArticles.push({
-              title: a.title,
-              content: a.description || a.content || '',
-              url: a.url,
-              source: a.source?.name || 'Unknown',
-              publishedAt: a.publishedAt,
-              image: a.image,
-            });
-          }
-        }
-      } catch (err) {
-        console.warn(`[AI Analyzer] GNews fetch failed for query: "${q}"`, err);
-      }
-    }
-
-    const seen = new Set();
-    const unique = allArticles.filter((a) => {
-      if (seen.has(a.url)) return false;
-      seen.add(a.url);
-      return true;
-    });
-
-    if (unique.length > 0) return unique;
-  }
-
-  // Fallback: PIB RSS
+  // Call backend proxy — avoids CORS issues with GNews
   try {
-    const rssUrl = 'https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fpib.gov.in%2FRssFeed.aspx%3FMenuId%3D2%26Lang%3D1%26RegDtFrom%3D%26RegDtTo%3D';
-    const res = await fetch(rssUrl, { signal: AbortSignal.timeout(5000) });
+    const res = await fetch(`${API_BASE}/api/ai/news`, { signal: AbortSignal.timeout(20000) });
     if (res.ok) {
       const data = await res.json();
-      if (data.items && data.items.length > 0) {
-        return data.items.slice(0, 10).map((item) => ({
-          title: item.title,
-          content: stripHtml(item.description || item.content || ''),
-          url: item.link,
-          source: 'PIB India (Press Information Bureau)',
-          publishedAt: item.pubDate,
-          image: item.thumbnail || item.enclosure?.link || null,
-        }));
+      if (data.articles && data.articles.length > 0) {
+        console.log(`[AI Analyzer] Got ${data.articles.length} articles from backend (source: ${data.source})`);
+        return data.articles;
       }
+    } else {
+      console.warn(`[AI Analyzer] Backend /api/ai/news returned ${res.status}`);
     }
   } catch (err) {
-    console.warn('[AI Analyzer] PIB RSS fallback failed:', err);
+    console.warn('[AI Analyzer] Backend news fetch failed:', err);
   }
 
-  // Fallback: newsdata.io
-  try {
-    const url = 'https://newsdata.io/api/1/latest?country=in&category=politics&language=en&q=scheme%20OR%20yojana%20OR%20subsidy';
-    const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.results && data.results.length > 0) {
-        return data.results.slice(0, 10).map((item) => ({
-          title: item.title,
-          content: item.description || item.content || '',
-          url: item.link,
-          source: item.source_name || item.source_id || 'News',
-          publishedAt: item.pubDate,
-          image: item.image_url || null,
-        }));
-      }
-    }
-  } catch (err) {
-    console.warn('[AI Analyzer] newsdata.io fallback failed:', err);
-  }
-
-  // Safety net
+  // Safety net — only if backend is completely down
+  console.warn('[AI Analyzer] Backend unreachable, using offline safety-net data.');
   return getRecentRealSchemes();
 }
 
 // =====================================================
-// 2. ANALYZE WITH AI + SOURCE VERIFICATION
+// 2. ANALYZE WITH AI + SOURCE VERIFICATION (via backend proxy)
 // =====================================================
 export async function analyzeHeadlineWithAI(article) {
   const textToAnalyze = `Title: ${article.title}\nContent: ${article.content}`;
+  const prompt = buildPrompt(textToAnalyze);
 
-  // Get base analysis
-  let analysis;
-  if (GEMINI_API_KEY) {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: buildPrompt(textToAnalyze) }] }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 500 },
-          }),
-          signal: AbortSignal.timeout(6000)
-        }
-      );
-      if (response.ok) {
-        const data = await response.json();
-        const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        analysis = parseAIResponse(rawText);
+  let analysis = null;
+
+  // Call backend proxy for AI analysis — avoids CORS with Gemini/OpenRouter
+  try {
+    const res = await fetch(`${API_BASE}/api/ai/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.text) {
+        console.log(`[AI Analyzer] AI analysis from: ${data.source}`);
+        analysis = parseAIResponse(data.text);
       }
-    } catch (err) {
-      console.warn('[AI Analyzer] Gemini API call failed:', err);
     }
+  } catch (err) {
+    console.warn('[AI Analyzer] Backend AI analysis failed:', err);
   }
 
+  // Fallback to local keyword analysis if backend AI failed
   if (!analysis) {
+    console.log('[AI Analyzer] Using local keyword analysis fallback.');
     analysis = localAnalysis(textToAnalyze);
   }
 

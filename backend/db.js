@@ -64,6 +64,19 @@ function initDb() {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS scraper_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      schemes_found INTEGER DEFAULT 0,
+      schemes_updated INTEGER DEFAULT 0,
+      error_message TEXT,
+      started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME
+    )
+  `);
+
   // User profiles table — stores the eligibility form submissions
   db.run(`
     CREATE TABLE IF NOT EXISTS user_profiles (

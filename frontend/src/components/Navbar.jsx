@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { FiMenu, FiSun, FiMoon, FiUser, FiLogOut } from 'react-icons/fi';
+import LogoIcon from './LogoIcon';
 import './Navbar.css';
 
 export default function Navbar({ toggleSidebar, isAuthPage }) {
@@ -48,7 +49,9 @@ export default function Navbar({ toggleSidebar, isAuthPage }) {
           )}
 
           <Link to="/" className="navbar-brand">
-            <div className="brand-logo" aria-hidden="true">S</div>
+            <div className="brand-logo" aria-hidden="true">
+              <LogoIcon size={24} />
+            </div>
             <span className="brand-text">Scheme Finder</span>
           </Link>
         </div>
