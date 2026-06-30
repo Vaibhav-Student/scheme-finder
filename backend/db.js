@@ -94,10 +94,15 @@ function initDb() {
       family_income REAL,
       education_level TEXT,
       udid_number TEXT,
+      extra_fields TEXT,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(username)
     )
-  `);
+  `, () => {
+    db.run(`ALTER TABLE user_profiles ADD COLUMN extra_fields TEXT`, (err) => {
+      // Column already exists or duplicate column is expected on subsequent runs — ignore
+    });
+  });
 
   db.run(`
     CREATE TABLE IF NOT EXISTS admins (

@@ -9,21 +9,23 @@ export default function Navbar({ toggleSidebar, isAuthPage }) {
   const { isAuthenticated, user, logout } = useAuth();
   const navigate = useNavigate();
   const [scrolled, setScrolled] = useState(false);
-  const [theme, setTheme] = useState(() => document.body.getAttribute('data-theme') || 'light');
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved) return saved;
+    return document.body.getAttribute('data-theme') || 'light';
+  });
 
   useEffect(() => {
-    // We are forcing a light theme appearance with "Luminous Clarity"
-    // So let's ensure the body theme is light initially
-    document.body.setAttribute('data-theme', 'light');
+    // Apply the saved theme state to the document body
+    document.body.setAttribute('data-theme', theme);
     
     const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [theme]);
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
-    document.body.setAttribute('data-theme', next);
     setTheme(next);
     localStorage.setItem('theme', next);
   };

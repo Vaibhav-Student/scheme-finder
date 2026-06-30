@@ -145,6 +145,15 @@ function matchProfile(profile, eligibility) {
   let passedChecks = 0;
   let hardFail = false;
 
+  let extra = {};
+  if (profile.extra_fields) {
+    try {
+      extra = typeof profile.extra_fields === 'string' ? JSON.parse(profile.extra_fields) : profile.extra_fields;
+    } catch (e) {
+      extra = {};
+    }
+  }
+
   // --- Age check ---
   if (eligibility.min_age && profile.age) {
     totalChecks++;
@@ -211,7 +220,6 @@ function matchProfile(profile, eligibility) {
       passedChecks++;
       reasons.push(`Education level ${profile.education_level} matches`);
     } else {
-      // Soft fail — don't hard-fail on education, it could be partial match
       reasons.push(`Education level ${profile.education_level} not specifically listed`);
     }
   }
@@ -239,7 +247,6 @@ function matchProfile(profile, eligibility) {
         reasons.push(`Disability type ${profile.disability_type} not specifically listed`);
       }
     } else {
-      // If scheme requires disability but user doesn't have one
       reasons.push('Scheme targets persons with disabilities');
     }
   }
@@ -252,6 +259,123 @@ function matchProfile(profile, eligibility) {
       reasons.push(`Disability ${profile.disability_percentage}% ≥ minimum ${eligibility.min_disability_pct}%`);
     } else {
       reasons.push(`Disability ${profile.disability_percentage}% below minimum ${eligibility.min_disability_pct}%`);
+    }
+  }
+
+  // --- Rural/Urban area type check ---
+  if (eligibility.rural_urban && eligibility.rural_urban !== 'Any') {
+    totalChecks++;
+    const userArea = profile.area_type || extra.area_type;
+    if (userArea && (eligibility.rural_urban.toLowerCase() === userArea.toLowerCase())) {
+      passedChecks++;
+      reasons.push(`Area type matches: ${userArea}`);
+    } else {
+      hardFail = true;
+      reasons.push(`Area type ${userArea || 'not set'} doesn't match required ${eligibility.rural_urban}`);
+    }
+  }
+
+  // --- Marital Status check ---
+  if (eligibility.marital_status && eligibility.marital_status !== 'Any') {
+    totalChecks++;
+    const userMarital = profile.marital_status || extra.marital_status;
+    if (userMarital && (eligibility.marital_status.toLowerCase() === userMarital.toLowerCase())) {
+      passedChecks++;
+      reasons.push(`Marital status matches: ${userMarital}`);
+    } else {
+      hardFail = true;
+      reasons.push(`Marital status ${userMarital || 'not set'} doesn't match required ${eligibility.marital_status}`);
+    }
+  }
+
+  // --- Farmer check ---
+  if (eligibility.is_farmer) {
+    totalChecks++;
+    const userFarmer = profile.is_farmer || extra.is_farmer || (extra.primary_role === 'Farmer' ? 'Yes' : 'No');
+    if (userFarmer === 'Yes' || userFarmer === true || userFarmer === 1) {
+      passedChecks++;
+      reasons.push('Farmer status matches');
+    } else {
+      hardFail = true;
+      reasons.push('Scheme requires applicant to be a farmer');
+    }
+  }
+
+  // --- Student check ---
+  if (eligibility.is_student) {
+    totalChecks++;
+    const userStudent = profile.is_student || extra.is_student || (extra.primary_role === 'Student' ? 'Yes' : 'No');
+    if (userStudent === 'Yes' || userStudent === true || userStudent === 1) {
+      passedChecks++;
+      reasons.push('Student status matches');
+    } else {
+      hardFail = true;
+      reasons.push('Scheme requires applicant to be a student');
+    }
+  }
+
+  // --- Business Owner check ---
+  if (eligibility.is_business_owner) {
+    totalChecks++;
+    const userBiz = profile.is_business_owner || extra.is_business_owner || (extra.primary_role === 'Business Owner / Self-Employed' ? 'Yes' : 'No');
+    if (userBiz === 'Yes' || userBiz === true || userBiz === 1) {
+      passedChecks++;
+      reasons.push('Business owner status matches');
+    } else {
+      hardFail = true;
+      reasons.push('Scheme requires applicant to be a business owner');
+    }
+  }
+
+  // --- Minority check ---
+  if (eligibility.is_minority) {
+    totalChecks++;
+    const userMin = profile.is_minority || extra.is_minority;
+    if (userMin === 'Yes' || userMin === true || userMin === 1) {
+      passedChecks++;
+      reasons.push('Minority status matches');
+    } else {
+      hardFail = true;
+      reasons.push('Scheme requires applicant to belong to a minority community');
+    }
+  }
+
+  // --- Ex-Serviceman check ---
+  if (eligibility.is_ex_serviceman) {
+    totalChecks++;
+    const userEx = profile.is_ex_serviceman || extra.is_ex_serviceman;
+    if (userEx === 'Yes' || userEx === true || userEx === 1) {
+      passedChecks++;
+      reasons.push('Ex-serviceman status matches');
+    } else {
+      hardFail = true;
+      reasons.push('Scheme requires applicant to be an ex-serviceman');
+    }
+  }
+
+  // --- Aadhaar check ---
+  if (eligibility.requires_aadhaar) {
+    totalChecks++;
+    const userAadhaar = profile.has_aadhaar || extra.has_aadhaar;
+    if (userAadhaar === 'Yes' || userAadhaar === true || userAadhaar === 1) {
+      passedChecks++;
+      reasons.push('Aadhaar card available');
+    } else {
+      hardFail = true;
+      reasons.push('Scheme requires an Aadhaar card');
+    }
+  }
+
+  // --- Bank Account check ---
+  if (eligibility.requires_bank_account) {
+    totalChecks++;
+    const userBank = profile.has_bank_account || extra.has_bank_account;
+    if (userBank === 'Yes' || userBank === true || userBank === 1) {
+      passedChecks++;
+      reasons.push('Bank account available');
+    } else {
+      hardFail = true;
+      reasons.push('Scheme requires a bank account');
     }
   }
 
@@ -270,23 +394,29 @@ function matchProfile(profile, eligibility) {
 
 // --- USER PROFILE API ---
 app.post('/api/profile', (req, res) => {
-  const { username, full_name, age, gender, has_disability, disability_type, disability_percentage, state, district, category, family_income, education_level, udid_number } = req.body;
+  const { username, full_name, age, gender, has_disability, disability_type, disability_percentage, state, district, category, family_income, education_level, udid_number, extra_fields } = req.body;
 
   if (!username || !full_name) {
     return res.status(400).json({ error: 'Username and full name are required' });
   }
 
-  const sql = `INSERT INTO user_profiles (username, full_name, age, gender, has_disability, disability_type, disability_percentage, state, district, category, family_income, education_level, udid_number, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+  const extraFieldsStr = typeof extra_fields === 'object' ? JSON.stringify(extra_fields) : extra_fields;
+
+  const sql = `INSERT INTO user_profiles (username, full_name, age, gender, has_disability, disability_type, disability_percentage, state, district, category, family_income, education_level, udid_number, extra_fields, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(username) DO UPDATE SET
       full_name=excluded.full_name, age=excluded.age, gender=excluded.gender,
       has_disability=excluded.has_disability, disability_type=excluded.disability_type,
       disability_percentage=excluded.disability_percentage, state=excluded.state,
       district=excluded.district, category=excluded.category,
       family_income=excluded.family_income, education_level=excluded.education_level,
-      udid_number=excluded.udid_number, updated_at=CURRENT_TIMESTAMP`;
+      udid_number=excluded.udid_number, extra_fields=excluded.extra_fields, updated_at=CURRENT_TIMESTAMP`;
 
-  db.run(sql, [username, full_name, age, gender, has_disability ? 1 : 0, disability_type || null, disability_percentage || 0, state, district, category, family_income || null, education_level, udid_number || null], function(err) {
+  db.run(sql, [
+    username, full_name, age, gender, has_disability ? 1 : 0, 
+    disability_type || null, disability_percentage || 0, state, district, 
+    category, family_income || null, education_level, udid_number || null, extraFieldsStr || null
+  ], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Profile saved successfully', id: this.lastID || this.changes });
   });
@@ -305,7 +435,7 @@ app.get('/api/profile/:username', (req, res) => {
       });
     }
 
-    db.get('SELECT u.username, u.email, u.password, p.full_name FROM users u LEFT JOIN user_profiles p ON u.username = p.username WHERE u.username = ?', [username], (err, user) => {
+    db.get('SELECT u.username, u.email, u.password, p.* FROM users u LEFT JOIN user_profiles p ON u.username = p.username WHERE u.username = ?', [username], (err, user) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!user) return res.status(404).json({ error: 'Profile not found' });
       res.json(user);
