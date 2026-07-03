@@ -11,12 +11,24 @@ export default function ViewUsers() {
 
   const fetchUsers = async () => {
     setLoading(true);
+    const url = (import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/users';
     try {
-      const res = await fetch((import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/users');
-      const data = await res.json();
+      console.log('Fetching users from:', url);
+      const res = await fetch(url);
+      let data = [];
+      try {
+        data = await res.json();
+      } catch (e) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
       setUsers(Array.isArray(data) ? data : []);
-    } catch {
-      toast.error('Failed to load users from database');
+    } catch (err) {
+      console.error(err);
+      toast.error(`Failed to load users: ${err.message}. (Requested URL: ${url})`);
+      setUsers([]);
     }
     setLoading(false);
   };

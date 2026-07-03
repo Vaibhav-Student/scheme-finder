@@ -38,6 +38,7 @@ export default function ManageSchemes() {
   const fetchSchemes = async () => {
     setLoading(true);
     try {
+      console.log('Fetching schemes from:', `${API_BASE}/schemes`);
       const res = await fetch(`${API_BASE}/schemes`);
       let data = [];
       try {
@@ -51,7 +52,7 @@ export default function ManageSchemes() {
       setSchemes(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to load schemes:', err);
-      toast.error(`Failed to load schemes: ${err.message}. Please check if the backend is running.`);
+      toast.error(`Failed to load schemes: ${err.message}. (Requested URL: ${API_BASE}/schemes)`);
       setSchemes([]);
     }
     setLoading(false);

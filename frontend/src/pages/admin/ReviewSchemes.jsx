@@ -13,16 +13,19 @@ export default function ReviewSchemes() {
   }, []);
 
   const loadSchemes = async () => {
+    const url = (import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/review';
     try {
-      const res = await fetch((import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/review');
+      console.log('Fetching review queue from:', url);
+      const res = await fetch(url);
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP ${res.status}`);
       }
       const data = await res.json();
       setSchemes(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
-      toast.error('Failed to load review queue from DB');
+      toast.error(`Failed to load review queue: ${err.message}. (Requested URL: ${url})`);
       setSchemes([]);
     }
   };
