@@ -210,7 +210,157 @@ async function initDb() {
       console.log('Seeded default admin user successfully.');
     }
 
-    // 7. Migration: Ensure password column is nullable in existing databases
+    // Seed default schemes if schemes table is empty
+    try {
+      const schemesCheck = await pool.query("SELECT COUNT(*) as count FROM schemes");
+      if (parseInt(schemesCheck.rows[0].count) === 0) {
+        const defaultSchemes = [
+          {
+            name: 'Post Matric Scholarship for OBC Students',
+            ministry: 'Ministry of Social Justice and Empowerment',
+            scheme_type: 'Scholarship',
+            benefits: 'Financial assistance to OBC students studying at post-matriculation or post-secondary stage.',
+            description: 'The objective of the scheme is to provide financial assistance to the OBC students studying at post-matriculation or post-secondary stage to enable them to complete their education. These scholarships shall be available for studies in India only and will be awarded by the Government of State/Union Territory to which the applicant actually belongs.',
+            apply_link: 'https://scholarships.gov.in',
+            required_documents: '["Aadhaar Card", "Income Certificate", "OBC Caste Certificate", "Previous Year Marksheet"]',
+            last_date: '2026-12-31',
+            is_active: 1,
+            eligibility: '{"min_age":15,"categories":["OBC"],"max_family_income":250000}',
+            source_url: 'https://scholarships.gov.in'
+          },
+          {
+            name: 'PM Kisan Samman Nidhi',
+            ministry: 'Ministry of Agriculture and Farmers Welfare',
+            scheme_type: 'Financial Assistance',
+            benefits: 'Income support of Rs. 6000/- per year in three equal installments will be provided to small and marginal farmer families.',
+            description: 'Under the scheme an income support of 6000/- per year in three equal installments will be provided to all land holding farmer families. State Government and UT administration will identify the farmer families which are eligible for support as per scheme guidelines. The fund will be directly transferred to the bank accounts of the beneficiaries.',
+            apply_link: 'https://pmkisan.gov.in',
+            required_documents: '["Aadhaar Card", "Land Ownership Documents", "Bank Account Details"]',
+            last_date: 'Ongoing',
+            is_active: 1,
+            eligibility: '{"min_age":18,"categories":["General","SC","ST","OBC"],"max_family_income":500000,"is_farmer":true}',
+            source_url: 'https://pmkisan.gov.in'
+          },
+          {
+            name: 'Pre-Matric Scholarship for SC Students',
+            ministry: 'Ministry of Social Justice and Empowerment',
+            scheme_type: 'Scholarship',
+            benefits: 'Financial assistance to SC students studying in classes IX and X.',
+            description: 'The objective of the scheme is to support parents of SC children for education of their wards studying in classes IX and X so that the incidence of drop-out, especially in the transition from the elementary to the secondary stage is minimized, and to improve participation of SC children in classes IX and X of the Pre-Matric stage, so that they perform better and have a better chance of progressing to the Post-Matric stage of education.',
+            apply_link: 'https://scholarships.gov.in',
+            required_documents: '["Aadhaar Card", "Income Certificate", "SC Caste Certificate", "School ID Card"]',
+            last_date: '2026-12-31',
+            is_active: 1,
+            eligibility: '{"min_age":10,"max_age":16,"categories":["SC"],"max_family_income":250000,"is_student":true}',
+            source_url: 'https://scholarships.gov.in'
+          },
+          {
+            name: 'Atal Pension Yojana',
+            ministry: 'Ministry of Finance',
+            scheme_type: 'Pension',
+            benefits: 'Guaranteed minimum pension of Rs. 1,000/- to 5,000/- per month will be given at the age of 60 years depending on the contributions by the subscribers.',
+            description: 'Atal Pension Yojana (APY) is a pension scheme for citizens of India focused on the unorganized sector workers. Under the APY, guaranteed minimum pension of Rs. 1,000/- to 5,000/- per month will be given at the age of 60 years depending on the contributions by the subscribers. The Central Government would also co-contribute 50% of the total contribution or Rs. 1000 per annum, whichever is lower, to each eligible subscriber account, for a period of 5 years.',
+            apply_link: 'https://enps.nsdl.com/eNPS/NationalPensionSystem.html',
+            required_documents: '["Aadhaar Card", "Bank Account Passbook", "Mobile Number"]',
+            last_date: 'Ongoing',
+            is_active: 1,
+            eligibility: '{"min_age":18,"max_age":40,"categories":["General","SC","ST","OBC"]}',
+            source_url: 'https://enps.nsdl.com/eNPS/NationalPensionSystem.html'
+          },
+          {
+            name: 'Sukanya Samriddhi Yojana',
+            ministry: 'Ministry of Finance',
+            scheme_type: 'Financial Assistance',
+            benefits: 'A savings scheme aimed at the betterment of girl children in the country.',
+            description: 'Sukanya Samriddhi Yojana (SSY) is a small deposit scheme of the Government of India meant exclusively for a girl child and is launched as a part of Beti Bachao Beti Padhao Campaign. The scheme is meant to meet the education and marriage expenses of a girl child. A Sukanya Samriddhi Account can be opened any time after the birth of a girl till she turns 10, with a minimum deposit of Rs 250.',
+            apply_link: 'https://www.indiapost.gov.in/Financial/Pages/Content/Post-Office-Saving-Schemes.aspx',
+            required_documents: '["Birth Certificate of Girl Child", "Aadhaar Card of Parent/Guardian", "Address Proof"]',
+            last_date: 'Ongoing',
+            is_active: 1,
+            eligibility: '{"gender":"Female","max_age":10,"categories":["General","SC","ST","OBC"]}',
+            source_url: 'https://www.indiapost.gov.in/Financial/Pages/Content/Post-Office-Saving-Schemes.aspx'
+          }
+        ];
+
+        for (const scheme of defaultSchemes) {
+          await pool.query(
+            `INSERT INTO schemes (name, description, benefits, required_documents, apply_link, last_date, ministry, scheme_type, is_active, eligibility, source_url) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            [
+              scheme.name,
+              scheme.description,
+              scheme.benefits,
+              scheme.required_documents,
+              scheme.apply_link,
+              scheme.last_date,
+              scheme.ministry,
+              scheme.scheme_type,
+              scheme.is_active,
+              scheme.eligibility,
+              scheme.source_url
+            ]
+          );
+        }
+        console.log('Seeded default schemes successfully.');
+      }
+    } catch (e) {
+      console.warn('Warning: Could not seed default schemes:', e.message);
+    }
+
+    // 7. Migration: Ensure all columns exist in schemes, review_queue, and user_profiles tables
+    try {
+      await pool.query("ALTER TABLE schemes ADD COLUMN IF NOT EXISTS name TEXT");
+      await pool.query("ALTER TABLE schemes ADD COLUMN IF NOT EXISTS description TEXT");
+      await pool.query("ALTER TABLE schemes ADD COLUMN IF NOT EXISTS benefits TEXT");
+      await pool.query("ALTER TABLE schemes ADD COLUMN IF NOT EXISTS required_documents TEXT");
+      await pool.query("ALTER TABLE schemes ADD COLUMN IF NOT EXISTS apply_link TEXT");
+      await pool.query("ALTER TABLE schemes ADD COLUMN IF NOT EXISTS last_date TEXT");
+      await pool.query("ALTER TABLE schemes ADD COLUMN IF NOT EXISTS ministry TEXT");
+      await pool.query("ALTER TABLE schemes ADD COLUMN IF NOT EXISTS scheme_type TEXT");
+      await pool.query("ALTER TABLE schemes ADD COLUMN IF NOT EXISTS is_active SMALLINT DEFAULT 1");
+      await pool.query("ALTER TABLE schemes ADD COLUMN IF NOT EXISTS eligibility TEXT");
+      await pool.query("ALTER TABLE schemes ADD COLUMN IF NOT EXISTS source_url TEXT DEFAULT ''");
+      console.log('Ensured all schemes table columns exist.');
+    } catch (e) {
+      console.warn('Warning: Could not run schemes table column migrations:', e.message);
+    }
+
+    try {
+      await pool.query("ALTER TABLE review_queue ADD COLUMN IF NOT EXISTS headline TEXT");
+      await pool.query("ALTER TABLE review_queue ADD COLUMN IF NOT EXISTS content TEXT");
+      await pool.query("ALTER TABLE review_queue ADD COLUMN IF NOT EXISTS name TEXT");
+      await pool.query("ALTER TABLE review_queue ADD COLUMN IF NOT EXISTS source_url TEXT");
+      await pool.query("ALTER TABLE review_queue ADD COLUMN IF NOT EXISTS source_name TEXT");
+      await pool.query("ALTER TABLE review_queue ADD COLUMN IF NOT EXISTS ai_confidence INTEGER");
+      await pool.query("ALTER TABLE review_queue ADD COLUMN IF NOT EXISTS ai_reason TEXT");
+      await pool.query("ALTER TABLE review_queue ADD COLUMN IF NOT EXISTS verification_status TEXT");
+      await pool.query("ALTER TABLE review_queue ADD COLUMN IF NOT EXISTS official_portal TEXT");
+      console.log('Ensured all review_queue table columns exist.');
+    } catch (e) {
+      console.warn('Warning: Could not run review_queue table column migrations:', e.message);
+    }
+
+    try {
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS username TEXT");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS full_name TEXT");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS age INTEGER");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS gender TEXT");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS has_disability SMALLINT DEFAULT 0");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS disability_type TEXT");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS disability_percentage INTEGER DEFAULT 0");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS state TEXT");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS district TEXT");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS category TEXT");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS family_income REAL");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS education_level TEXT");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS udid_number TEXT");
+      await pool.query("ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS extra_fields TEXT");
+      console.log('Ensured all user_profiles table columns exist.');
+    } catch (e) {
+      console.warn('Warning: Could not run user_profiles table column migrations:', e.message);
+    }
+
+    // 8. Migration: Ensure password column is nullable in existing databases
     try {
       await pool.query('ALTER TABLE users ALTER COLUMN password DROP NOT NULL');
       await pool.query("ALTER TABLE users ALTER COLUMN password SET DEFAULT ''");
