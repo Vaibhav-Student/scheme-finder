@@ -437,7 +437,15 @@ app.get('/api/profile/:username', (req, res) => {
 
     db.get('SELECT u.username, u.email, u.password, p.* FROM users u LEFT JOIN user_profiles p ON u.username = p.username WHERE u.username = ?', [username], (err, user) => {
       if (err) return res.status(500).json({ error: err.message });
-      if (!user) return res.status(404).json({ error: 'Profile not found' });
+      if (!user) {
+        // Fallback for Supabase users who don't exist in the local SQLite users table
+        db.get('SELECT * FROM user_profiles WHERE username = ?', [username], (err2, profile) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+          if (!profile) return res.status(404).json({ error: 'Profile not found' });
+          res.json({ username, email: '', password: '', ...profile });
+        });
+        return;
+      }
       res.json(user);
     });
   });

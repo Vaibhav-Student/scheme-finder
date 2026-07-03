@@ -81,8 +81,8 @@ export default function Login() {
             {/* Mode toggle tabs */}
             <div style={{
               display: 'flex', gap: '0.5rem', marginBottom: '1.25rem',
-              background: 'rgba(255,255,255,0.04)', borderRadius: '0.6rem',
-              padding: '0.3rem', border: '1px solid rgba(255,255,255,0.06)'
+              background: 'var(--bg-primary)', borderRadius: '0.6rem',
+              padding: '0.3rem', border: '1px solid var(--border-primary)'
             }}>
               <button
                 type="button"
@@ -94,7 +94,7 @@ export default function Login() {
                   background: mode === 'user'
                     ? 'linear-gradient(135deg, #6366F1, #818cf8)'
                     : 'transparent',
-                  color: mode === 'user' ? '#fff' : 'rgba(255,255,255,0.5)',
+                  color: mode === 'user' ? '#fff' : 'var(--text-muted)',
                 }}
               >
                 User Login
@@ -109,7 +109,7 @@ export default function Login() {
                   background: mode === 'admin'
                     ? 'linear-gradient(135deg, #6366F1, #818cf8)'
                     : 'transparent',
-                  color: mode === 'admin' ? '#fff' : 'rgba(255,255,255,0.5)',
+                  color: mode === 'admin' ? '#fff' : 'var(--text-muted)',
                 }}
               >
                 Admin Login

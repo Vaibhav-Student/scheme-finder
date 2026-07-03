@@ -27,40 +27,22 @@ export default function UserProfile() {
         return;
       }
 
-      if (isAdmin) {
-        // Admin: load from backend
-        try {
-          const res = await fetch(`${API_BASE}/profile/${user.username}`);
-          if (res.ok) {
-            const data = await res.json();
-            setFormData(prev => ({
-              ...prev,
-              username: user.username,
-              email: data.email || '',
-              full_name: data.full_name || '',
-            }));
-          }
-        } catch (err) {
-          console.error("Failed to load admin profile", err);
-        }
-      } else {
-        // Regular user: read from Supabase session
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          const meta = session.user.user_metadata || {};
-          setFormData(prev => ({
-            ...prev,
-            username: meta.username || session.user.email,
-            email: session.user.email || '',
-            full_name: meta.full_name || meta.username || '',
-          }));
-        }
+      // Read profile data from Supabase session (both users and admins use Supabase now)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const meta = session.user.user_metadata || {};
+        setFormData(prev => ({
+          ...prev,
+          username: meta.username || session.user.email,
+          email: session.user.email || '',
+          full_name: meta.full_name || meta.username || '',
+        }));
       }
 
       setInitialLoading(false);
     };
     loadProfile();
-  }, [user, isAdmin]);
+  }, [user]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -96,62 +78,29 @@ export default function UserProfile() {
 
     setLoading(true);
     try {
-      if (isAdmin) {
-        // Admin: update via backend API (unchanged)
-        const payload = {
-          currentUsername: user.username,
+      // Both standard users and admins update their profiles via Supabase
+      const updates = {
+        data: {
           username: formData.username,
-          email: formData.email,
           full_name: formData.full_name,
-          password: formData.password || undefined
-        };
+        },
+      };
 
-        const res = await fetch(`${API_BASE}/users/update`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to update profile');
-
-        // Update admin local storage
-        const adminData = JSON.parse(localStorage.getItem('admin_user_data') || '{}');
-        adminData.username = data.newUsername;
-        localStorage.setItem('admin_user_data', JSON.stringify(adminData));
-
-        toast.success('Admin profile updated!');
-
-        if (payload.currentUsername !== payload.username) {
-          setTimeout(() => window.location.reload(), 1500);
-        } else {
-          setFormData(prev => ({ ...prev, password: '', confirm_password: '' }));
-        }
-      } else {
-        // Regular user: update via Supabase
-        const updates = {
-          data: {
-            username: formData.username,
-            full_name: formData.full_name,
-          },
-        };
-
-        // Update email if changed
-        if (formData.email !== user.email) {
-          updates.email = formData.email;
-        }
-
-        // Update password if provided
-        if (formData.password) {
-          updates.password = formData.password;
-        }
-
-        const { error } = await supabase.auth.updateUser(updates);
-        if (error) throw new Error(error.message);
-
-        toast.success('Your profile has been updated!');
-        setFormData(prev => ({ ...prev, password: '', confirm_password: '' }));
+      // Update email if changed
+      if (formData.email !== user.email) {
+        updates.email = formData.email;
       }
+
+      // Update password if provided
+      if (formData.password) {
+        updates.password = formData.password;
+      }
+
+      const { error } = await supabase.auth.updateUser(updates);
+      if (error) throw new Error(error.message);
+
+      toast.success('Your profile has been updated!');
+      setFormData(prev => ({ ...prev, password: '', confirm_password: '' }));
     } catch (err) {
       console.error('Profile update error:', err);
       toast.error(err.message || 'Failed to update profile.');

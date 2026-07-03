@@ -15,28 +15,22 @@ export function AuthProvider({ children }) {
   const buildUserFromSession = (session) => {
     if (!session?.user) return null;
     const meta = session.user.user_metadata || {};
+    const email = session.user.email || '';
+    const is_admin = email.toLowerCase() === 'admin@example.com' || 
+                     email.toLowerCase().startsWith('admin@') || 
+                     meta.role === 'admin' || 
+                     meta.is_admin === true;
     return {
-      username: meta.username || session.user.email,
-      email: session.user.email,
-      is_admin: false,
+      username: meta.username || email,
+      email: email,
+      is_admin: is_admin,
     };
   };
 
   // ----- Bootstrap: restore session on mount -----
   useEffect(() => {
     const initAuth = async () => {
-      // Check for an admin stored in localStorage (admin login goes through backend)
-      const adminData = localStorage.getItem('admin_user_data');
-      if (adminData) {
-        try {
-          setUser(JSON.parse(adminData));
-          setToken(localStorage.getItem('admin_access_token'));
-          setIsLoading(false);
-          return;
-        } catch { /* fall through */ }
-      }
-
-      // Otherwise try Supabase session
+      // Try Supabase session
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setUser(buildUserFromSession(session));
@@ -50,9 +44,6 @@ export function AuthProvider({ children }) {
     // Listen for auth state changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        // Don't overwrite admin session
-        if (localStorage.getItem('admin_user_data')) return;
-
         if (session) {
           setUser(buildUserFromSession(session));
           setToken(session.access_token);
@@ -74,32 +65,18 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // ----- Login (regular user via Supabase, admin via backend) -----
+  // ----- Login (via Supabase) -----
   const login = async (emailOrUsername, password) => {
-    // Try admin login via backend first
-    try {
-      const res = await fetch('http://localhost:5000/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: emailOrUsername, password }),
-      });
-      const data = await res.json();
-      if (res.ok && data.role === 'admin') {
-        const adminUser = { username: data.user.username, is_admin: true };
-        localStorage.setItem('admin_access_token', data.token);
-        localStorage.setItem('admin_user_data', JSON.stringify(adminUser));
-        setToken(data.token);
-        setUser(adminUser);
-        return data;
-      }
-    } catch {
-      // Backend unreachable — continue to Supabase
+    checkSupabaseConfig();
+
+    let email = emailOrUsername;
+    // Map standard username 'admin' to its default email for Supabase authentication
+    if (email === 'admin') {
+      email = 'admin@example.com';
     }
 
-    // Regular user login via Supabase (uses email)
-    checkSupabaseConfig();
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: emailOrUsername,
+      email,
       password,
     });
 
@@ -109,7 +86,7 @@ export function AuthProvider({ children }) {
     setUser(sessionUser);
     setToken(data.session.access_token);
 
-    return { role: 'user', user: sessionUser };
+    return { role: sessionUser.is_admin ? 'admin' : 'user', user: sessionUser };
   };
 
   // ----- Signup (regular user via Supabase) -----
