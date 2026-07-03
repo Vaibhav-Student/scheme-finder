@@ -7,6 +7,40 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Database debugging endpoint
+app.get('/api/db-debug', async (req, res) => {
+  const dbConfigured = !!process.env.DATABASE_URL;
+  const isPlaceholder = dbConfigured && process.env.DATABASE_URL.includes('your-project-ref');
+  
+  let queryResult = null;
+  let queryError = null;
+  
+  try {
+    const start = Date.now();
+    const result = await db.pool.query('SELECT NOW()');
+    queryResult = {
+      status: 'success',
+      time: Date.now() - start,
+      rows: result.rows
+    };
+  } catch (err) {
+    queryError = {
+      message: err.message,
+      code: err.code,
+      detail: err.detail,
+      stack: err.stack,
+      keys: Object.keys(err)
+    };
+  }
+  
+  res.json({
+    dbConfigured,
+    isPlaceholder,
+    queryResult,
+    queryError
+  });
+});
+
 // --- SCHEMES API ---
 app.get('/api/schemes', (req, res) => {
   db.all('SELECT * FROM schemes ORDER BY id DESC', [], (err, rows) => {

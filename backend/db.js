@@ -25,6 +25,7 @@ function convertSql(sql) {
 
 // Wrapper object mimicking sqlite3 Database API
 const db = {
+  pool,
   // Query multiple rows: db.all(sql, params, callback)
   all(sql, params = [], callback) {
     if (typeof params === 'function') {
