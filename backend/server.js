@@ -42,10 +42,10 @@ app.get('/api/db-debug', async (req, res) => {
 });
 
 // --- SCHEMES API ---
-app.get('/api/schemes', (req, res) => {
-  db.all('SELECT * FROM schemes ORDER BY id DESC', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    const formatted = rows.map(r => {
+app.get('/api/schemes', async (req, res) => {
+  try {
+    const result = await db.query('SELECT * FROM schemes ORDER BY id DESC');
+    const formatted = result.rows.map(r => {
       let parsedEligibility = {};
       try { parsedEligibility = JSON.parse(r.eligibility); } catch (e) { parsedEligibility = {}; }
       
@@ -60,13 +60,16 @@ app.get('/api/schemes', (req, res) => {
       };
     });
     res.json(formatted);
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Get a single scheme by ID
-app.get('/api/schemes/:id', (req, res) => {
-  db.get('SELECT * FROM schemes WHERE id = ?', [req.params.id], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
+app.get('/api/schemes/:id', async (req, res) => {
+  try {
+    const result = await db.query('SELECT * FROM schemes WHERE id = $1', [req.params.id]);
+    const row = result.rows[0];
     if (!row) return res.status(404).json({ error: 'Scheme not found' });
 
     let parsedEligibility = {};
@@ -80,100 +83,111 @@ app.get('/api/schemes/:id', (req, res) => {
       eligibility: parsedEligibility,
       required_documents: parsedDocs
     });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/schemes', (req, res) => {
-  const { name, description, benefits, required_documents, apply_link, last_date, ministry, scheme_type, is_active, eligibility, source_url } = req.body;
-  const sql = `INSERT INTO schemes (name, description, benefits, required_documents, apply_link, last_date, ministry, scheme_type, is_active, eligibility, source_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-  
-  const eligibilityStr = typeof eligibility === 'object' ? JSON.stringify(eligibility) : (eligibility || '{}');
-  const docsStr = typeof required_documents === 'object' ? JSON.stringify(required_documents) : (required_documents || '[]');
+app.post('/api/schemes', async (req, res) => {
+  try {
+    const { name, description, benefits, required_documents, apply_link, last_date, ministry, scheme_type, is_active, eligibility, source_url } = req.body;
+    const sql = `INSERT INTO schemes (name, description, benefits, required_documents, apply_link, last_date, ministry, scheme_type, is_active, eligibility, source_url) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`;
+    
+    const eligibilityStr = typeof eligibility === 'object' ? JSON.stringify(eligibility) : (eligibility || '{}');
+    const docsStr = typeof required_documents === 'object' ? JSON.stringify(required_documents) : (required_documents || '[]');
 
-  db.run(
-    sql, 
-    [
-      name || '', 
-      description || '', 
-      benefits || '', 
-      docsStr, 
-      apply_link || '', 
-      last_date || '', 
-      ministry || '', 
-      scheme_type || '', 
-      is_active ? 1 : 0, 
-      eligibilityStr, 
-      source_url || ''
-    ], 
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ id: this.lastID, message: 'Scheme created successfully' });
-    }
-  );
+    const result = await db.query(
+      sql, 
+      [
+        name || '', 
+        description || '', 
+        benefits || '', 
+        docsStr, 
+        apply_link || '', 
+        last_date || '', 
+        ministry || '', 
+        scheme_type || '', 
+        is_active ? 1 : 0, 
+        eligibilityStr, 
+        source_url || ''
+      ]
+    );
+    res.json({ id: result.rows[0].id, message: 'Scheme created successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.put('/api/schemes/:id/deactivate', (req, res) => {
-  db.run('UPDATE schemes SET is_active = 0 WHERE id = ?', req.params.id, function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Scheme not found' });
+app.put('/api/schemes/:id/deactivate', async (req, res) => {
+  try {
+    const result = await db.query('UPDATE schemes SET is_active = 0 WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Scheme not found' });
     res.json({ message: 'Scheme deactivated successfully' });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.put('/api/schemes/:id/reactivate', (req, res) => {
-  db.run('UPDATE schemes SET is_active = 1 WHERE id = ?', req.params.id, function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Scheme not found' });
+app.put('/api/schemes/:id/reactivate', async (req, res) => {
+  try {
+    const result = await db.query('UPDATE schemes SET is_active = 1 WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Scheme not found' });
     res.json({ message: 'Scheme reactivated successfully' });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.put('/api/schemes/:id', (req, res) => {
-  const { name, description, benefits, required_documents, apply_link, last_date, ministry, scheme_type, is_active, eligibility, source_url } = req.body;
-  const sql = `UPDATE schemes SET name=?, description=?, benefits=?, required_documents=?, apply_link=?, last_date=?, ministry=?, scheme_type=?, is_active=?, eligibility=?, source_url=? WHERE id=?`;
-  
-  const eligibilityStr = typeof eligibility === 'object' ? JSON.stringify(eligibility) : (eligibility || '{}');
-  const docsStr = typeof required_documents === 'object' ? JSON.stringify(required_documents) : (required_documents || '[]');
+app.put('/api/schemes/:id', async (req, res) => {
+  try {
+    const { name, description, benefits, required_documents, apply_link, last_date, ministry, scheme_type, is_active, eligibility, source_url } = req.body;
+    const sql = `UPDATE schemes SET name=$1, description=$2, benefits=$3, required_documents=$4, apply_link=$5, last_date=$6, ministry=$7, scheme_type=$8, is_active=$9, eligibility=$10, source_url=$11 WHERE id=$12`;
+    
+    const eligibilityStr = typeof eligibility === 'object' ? JSON.stringify(eligibility) : (eligibility || '{}');
+    const docsStr = typeof required_documents === 'object' ? JSON.stringify(required_documents) : (required_documents || '[]');
 
-  db.run(
-    sql, 
-    [
-      name || '', 
-      description || '', 
-      benefits || '', 
-      docsStr, 
-      apply_link || '', 
-      last_date || '', 
-      ministry || '', 
-      scheme_type || '', 
-      is_active ? 1 : 0, 
-      eligibilityStr, 
-      source_url || '', 
-      req.params.id
-    ], 
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      if (this.changes === 0) return res.status(404).json({ error: 'Scheme not found' });
-      res.json({ message: 'Scheme updated successfully' });
-    }
-  );
+    const result = await db.query(
+      sql, 
+      [
+        name || '', 
+        description || '', 
+        benefits || '', 
+        docsStr, 
+        apply_link || '', 
+        last_date || '', 
+        ministry || '', 
+        scheme_type || '', 
+        is_active ? 1 : 0, 
+        eligibilityStr, 
+        source_url || '', 
+        req.params.id
+      ]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Scheme not found' });
+    res.json({ message: 'Scheme updated successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete('/api/schemes/:id', (req, res) => {
-  db.run('DELETE FROM schemes WHERE id = ?', req.params.id, function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Scheme not found' });
+app.delete('/api/schemes/:id', async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM schemes WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Scheme not found' });
     res.json({ message: 'Scheme deleted permanently' });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- SCHEME MATCHING API ---
 // Accepts user profile data and returns matching active schemes from the DB
-app.post('/api/schemes/match', (req, res) => {
-  const profile = req.body;
-
-  db.all('SELECT * FROM schemes WHERE is_active = 1 ORDER BY id DESC', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+app.post('/api/schemes/match', async (req, res) => {
+  try {
+    const profile = req.body;
+    const result = await db.query('SELECT * FROM schemes WHERE is_active = 1 ORDER BY id DESC');
+    const rows = result.rows;
 
     const results = [];
     for (const row of rows) {
@@ -199,7 +213,9 @@ app.post('/api/schemes/match', (req, res) => {
     // Sort by match score descending
     results.sort((a, b) => b.match_score - a.match_score);
     res.json(results);
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**
@@ -460,50 +476,53 @@ function matchProfile(profile, eligibility) {
 }
 
 // --- USER PROFILE API ---
-app.post('/api/profile', (req, res) => {
-  const { username, full_name, age, gender, has_disability, disability_type, disability_percentage, state, district, category, family_income, education_level, udid_number, extra_fields } = req.body;
+app.post('/api/profile', async (req, res) => {
+  try {
+    const { username, full_name, age, gender, has_disability, disability_type, disability_percentage, state, district, category, family_income, education_level, udid_number, extra_fields } = req.body;
 
-  if (!username || !full_name) {
-    return res.status(400).json({ error: 'Username and full name are required' });
+    if (!username || !full_name) {
+      return res.status(400).json({ error: 'Username and full name are required' });
+    }
+
+    const extraFieldsStr = typeof extra_fields === 'object' ? JSON.stringify(extra_fields) : extra_fields;
+
+    const sql = `INSERT INTO user_profiles (username, full_name, age, gender, has_disability, disability_type, disability_percentage, state, district, category, family_income, education_level, udid_number, extra_fields, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
+      ON CONFLICT(username) DO UPDATE SET
+        full_name=excluded.full_name, age=excluded.age, gender=excluded.gender,
+        has_disability=excluded.has_disability, disability_type=excluded.disability_type,
+        disability_percentage=excluded.disability_percentage, state=excluded.state,
+        district=excluded.district, category=excluded.category,
+        family_income=excluded.family_income, education_level=excluded.education_level,
+        udid_number=excluded.udid_number, extra_fields=excluded.extra_fields, updated_at=CURRENT_TIMESTAMP RETURNING id`;
+
+    const result = await db.query(sql, [
+      username, 
+      full_name, 
+      age || null, 
+      gender || null, 
+      has_disability ? 1 : 0, 
+      disability_type || null, 
+      disability_percentage || 0, 
+      state || null, 
+      district || null, 
+      category || null, 
+      family_income || null, 
+      education_level || null, 
+      udid_number || null, 
+      extraFieldsStr || null
+    ]);
+    res.json({ message: 'Profile saved successfully', id: result.rows[0]?.id || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  const extraFieldsStr = typeof extra_fields === 'object' ? JSON.stringify(extra_fields) : extra_fields;
-
-  const sql = `INSERT INTO user_profiles (username, full_name, age, gender, has_disability, disability_type, disability_percentage, state, district, category, family_income, education_level, udid_number, extra_fields, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(username) DO UPDATE SET
-      full_name=excluded.full_name, age=excluded.age, gender=excluded.gender,
-      has_disability=excluded.has_disability, disability_type=excluded.disability_type,
-      disability_percentage=excluded.disability_percentage, state=excluded.state,
-      district=excluded.district, category=excluded.category,
-      family_income=excluded.family_income, education_level=excluded.education_level,
-      udid_number=excluded.udid_number, extra_fields=excluded.extra_fields, updated_at=CURRENT_TIMESTAMP`;
-
-  db.run(sql, [
-    username, 
-    full_name, 
-    age || null, 
-    gender || null, 
-    has_disability ? 1 : 0, 
-    disability_type || null, 
-    disability_percentage || 0, 
-    state || null, 
-    district || null, 
-    category || null, 
-    family_income || null, 
-    education_level || null, 
-    udid_number || null, 
-    extraFieldsStr || null
-  ], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Profile saved successfully', id: this.lastID || this.changes });
-  });
 });
 
-app.get('/api/profile/:username', (req, res) => {
-  const username = req.params.username;
-  db.get('SELECT username, email, password, full_name FROM admins WHERE username = ? OR email = ?', [username, username], (err, admin) => {
-    if (err) return res.status(500).json({ error: err.message });
+app.get('/api/profile/:username', async (req, res) => {
+  try {
+    const username = req.params.username;
+    const adminResult = await db.query('SELECT username, email, password, full_name FROM admins WHERE username = $1 OR email = $2', [username, username]);
+    const admin = adminResult.rows[0];
     if (admin) {
       return res.json({
         username: admin.username,
@@ -513,183 +532,195 @@ app.get('/api/profile/:username', (req, res) => {
       });
     }
 
-    db.get('SELECT u.username, u.email, u.is_suspended, p.* FROM users u LEFT JOIN user_profiles p ON u.username = p.username WHERE u.username = ?', [username], (err, user) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (user) {
-        if (user.is_suspended === 1) {
-          return res.status(403).json({ error: 'suspended', message: 'Your account has been suspended by the administrator.' });
-        }
-        return res.json(user);
+    const userResult = await db.query('SELECT u.username, u.email, u.is_suspended, p.* FROM users u LEFT JOIN user_profiles p ON u.username = p.username WHERE u.username = $1', [username]);
+    const user = userResult.rows[0];
+    if (user) {
+      if (user.is_suspended === 1) {
+        return res.status(403).json({ error: 'suspended', message: 'Your account has been suspended by the administrator.' });
       }
+      return res.json(user);
+    }
 
-      // Fallback for Supabase users who don't exist in the local public users table yet
-      db.get('SELECT * FROM user_profiles WHERE username = ?', [username], (err2, profile) => {
-        if (err2) return res.status(500).json({ error: err2.message });
-        if (!profile) return res.status(404).json({ error: 'Profile not found' });
-        res.json({ username, email: '', password: '', is_suspended: 0, ...profile });
-      });
-    });
-  });
+    // Fallback for Supabase users who don't exist in the local public users table yet
+    const profileResult = await db.query('SELECT * FROM user_profiles WHERE username = $1', [username]);
+    const profile = profileResult.rows[0];
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+    res.json({ username, email: '', password: '', is_suspended: 0, ...profile });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- REVIEW QUEUE API ---
-app.get('/api/review', (req, res) => {
-  db.all('SELECT * FROM review_queue ORDER BY id DESC', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+app.get('/api/review', async (req, res) => {
+  try {
+    const result = await db.query('SELECT * FROM review_queue ORDER BY id DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/review', (req, res) => {
-  const { headline, content, name, source_url, source_name, ai_confidence, ai_reason, verification_status, official_portal } = req.body;
-  const sql = `INSERT INTO review_queue (headline, content, name, source_url, source_name, ai_confidence, ai_reason, verification_status, official_portal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-  
-  db.run(
-    sql, 
-    [
-      headline || '', 
-      content || null, 
-      name || null, 
-      source_url || null, 
-      source_name || null, 
-      ai_confidence || 0, 
-      ai_reason || null, 
-      verification_status || null, 
-      official_portal || null
-    ], 
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ id: this.lastID, ...req.body });
-    }
-  );
+app.post('/api/review', async (req, res) => {
+  try {
+    const { headline, content, name, source_url, source_name, ai_confidence, ai_reason, verification_status, official_portal } = req.body;
+    const sql = `INSERT INTO review_queue (headline, content, name, source_url, source_name, ai_confidence, ai_reason, verification_status, official_portal) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`;
+    
+    const result = await db.query(
+      sql, 
+      [
+        headline || '', 
+        content || null, 
+        name || null, 
+        source_url || null, 
+        source_name || null, 
+        ai_confidence || 0, 
+        ai_reason || null, 
+        verification_status || null, 
+        official_portal || null
+      ]
+    );
+    res.json({ id: result.rows[0].id, ...req.body });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete('/api/review/:id', (req, res) => {
-  db.run('DELETE FROM review_queue WHERE id = ?', req.params.id, function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ deleted: this.changes });
-  });
+app.delete('/api/review/:id', async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM review_queue WHERE id = $1', [req.params.id]);
+    res.json({ deleted: result.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- AUTH API ---
-app.post('/api/auth/register', (req, res) => {
-  const { username, email, password } = req.body;
-  if (!username || !email || !password) return res.status(400).json({ error: 'All fields are required' });
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { username, email, password } = req.body;
+    if (!username || !email || !password) return res.status(400).json({ error: 'All fields are required' });
 
-  db.run(`INSERT INTO users (username, email, password) VALUES (?, ?, ?)`, [username, email, password], function(err) {
-    if (err) {
-      if (err.message.includes('UNIQUE constraint failed') || err.message.includes('duplicate key') || err.code === '23505') {
-        return res.status(400).json({ error: 'Username or Email already exists' });
-      }
-      return res.status(500).json({ error: err.message });
+    const result = await db.query(`INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id`, [username, email, password]);
+    res.json({ message: 'User registered successfully', userId: result.rows[0].id, role: 'user' });
+  } catch (err) {
+    if (err.message.includes('UNIQUE constraint failed') || err.message.includes('duplicate key') || err.code === '23505') {
+      return res.status(400).json({ error: 'Username or Email already exists' });
     }
-    res.json({ message: 'User registered successfully', userId: this.lastID, role: 'user' });
-  });
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/auth/login', (req, res) => {
-  const { username, password } = req.body;
-  
-  // Check admin first
-  db.get('SELECT * FROM admins WHERE (username = ? OR email = ?) AND password = ?', [username, username, password], (err, admin) => {
-    if (err) return res.status(500).json({ error: err.message });
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    // Check admin first
+    const adminResult = await db.query('SELECT * FROM admins WHERE (username = $1 OR email = $2) AND password = $3', [username, username, password]);
+    const admin = adminResult.rows[0];
     if (admin) {
       return res.json({ token: 'mock-admin-token-123', role: 'admin', user: { username: admin.username } });
     }
 
     // Check user
-    db.get('SELECT * FROM users WHERE username = ? AND password = ?', [username, password], (err, user) => {
-      if (err) return res.status(500).json({ error: err.message });
-      if (user) {
-        if (user.is_suspended === 1) {
-          return res.status(403).json({ error: 'Your account has been suspended by the administrator.' });
-        }
-        return res.json({ token: 'mock-user-token-123', role: 'user', user: { username, email: user.email } });
+    const userResult = await db.query('SELECT * FROM users WHERE username = $1 AND password = $2', [username, password]);
+    const user = userResult.rows[0];
+    if (user) {
+      if (user.is_suspended === 1) {
+        return res.status(403).json({ error: 'Your account has been suspended by the administrator.' });
       }
-      res.status(401).json({ error: 'Invalid username or password' });
-    });
-  });
+      return res.json({ token: 'mock-user-token-123', role: 'user', user: { username, email: user.email } });
+    }
+    res.status(401).json({ error: 'Invalid username or password' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- USERS API ---
-app.get('/api/users', (req, res) => {
-  db.all('SELECT id, username, email, is_suspended, created_at FROM users ORDER BY created_at DESC', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
-});
-
-app.get('/api/users/count', (req, res) => {
-  db.get('SELECT COUNT(*) as count FROM users', [], (err, row) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ count: row.count });
-  });
-});
-
-app.put('/api/users/:id/suspend', (req, res) => {
-  const { suspend } = req.body;
-  db.run('UPDATE users SET is_suspended = ? WHERE id = ?', [suspend ? 1 : 0, req.params.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: `User ${suspend ? 'suspended' : 'activated'} successfully` });
-  });
-});
-
-app.put('/api/users/update', (req, res) => {
-  const { currentUsername, username, email, password, full_name } = req.body;
-  
-  if (!currentUsername || !username) {
-    return res.status(400).json({ error: 'Username is required' });
+app.get('/api/users', async (req, res) => {
+  try {
+    const result = await db.query('SELECT id, username, email, is_suspended, created_at FROM users ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
+});
 
-  // Check if admin
-  db.get('SELECT * FROM admins WHERE username = ? OR email = ?', [currentUsername, currentUsername], (err, admin) => {
-    if (err) return res.status(500).json({ error: err.message });
+app.get('/api/users/count', async (req, res) => {
+  try {
+    const result = await db.query('SELECT COUNT(*) as count FROM users');
+    res.json({ count: parseInt(result.rows[0].count) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/users/:id/suspend', async (req, res) => {
+  try {
+    const { suspend } = req.body;
+    await db.query('UPDATE users SET is_suspended = $1 WHERE id = $2', [suspend ? 1 : 0, req.params.id]);
+    res.json({ message: `User ${suspend ? 'suspended' : 'activated'} successfully` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/users/update', async (req, res) => {
+  try {
+    const { currentUsername, username, email, password, full_name } = req.body;
+    
+    if (!currentUsername || !username) {
+      return res.status(400).json({ error: 'Username is required' });
+    }
+
+    // Check if admin
+    const adminCheck = await db.query('SELECT * FROM admins WHERE username = $1 OR email = $2', [currentUsername, currentUsername]);
+    const admin = adminCheck.rows[0];
     
     if (admin) {
-      let adminSql = 'UPDATE admins SET username = ?, email = ?, full_name = ?';
+      let adminSql = 'UPDATE admins SET username = $1, email = $2, full_name = $3';
       let adminParams = [username, email || '', full_name || ''];
+      let paramIndex = 4;
       if (password) {
-        adminSql += ', password = ?';
+        adminSql += `, password = $${paramIndex++}`;
         adminParams.push(password);
       }
-      adminSql += ' WHERE username = ? OR email = ?';
+      adminSql += ` WHERE username = $${paramIndex++} OR email = $${paramIndex++}`;
       adminParams.push(currentUsername, currentUsername);
 
-      db.run(adminSql, adminParams, function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Admin profile updated successfully', newUsername: username, newEmail: email || '' });
-      });
+      await db.query(adminSql, adminParams);
+      res.json({ message: 'Admin profile updated successfully', newUsername: username, newEmail: email || '' });
     } else {
       if (!email) return res.status(400).json({ error: 'Email is required' });
 
       // Check if new username or email already exists (if changing)
-      db.get('SELECT * FROM users WHERE (username = ? OR email = ?) AND username != ?', [username, email, currentUsername], (err, existingUser) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (existingUser) return res.status(400).json({ error: 'Username or Email already taken' });
+      const existingUserCheck = await db.query('SELECT * FROM users WHERE (username = $1 OR email = $2) AND username != $3', [username, email, currentUsername]);
+      if (existingUserCheck.rows[0]) return res.status(400).json({ error: 'Username or Email already taken' });
 
-        // Update users table
-        let userSql = 'UPDATE users SET username = ?, email = ?';
-        let userParams = [username, email];
-        
-        if (password) {
-          userSql += ', password = ?';
-          userParams.push(password);
-        }
-        userSql += ' WHERE username = ?';
-        userParams.push(currentUsername);
+      // Update users table
+      let userSql = 'UPDATE users SET username = $1, email = $2';
+      let userParams = [username, email];
+      let paramIndex = 3;
+      
+      if (password) {
+        userSql += `, password = $${paramIndex++}`;
+        userParams.push(password);
+      }
+      userSql += ` WHERE username = $${paramIndex++}`;
+      userParams.push(currentUsername);
 
-        db.run(userSql, userParams, function(err) {
-          if (err) return res.status(500).json({ error: err.message });
-          if (this.changes === 0) return res.status(404).json({ error: 'User not found' });
+      const userUpdateResult = await db.query(userSql, userParams);
+      if (userUpdateResult.rowCount === 0) return res.status(404).json({ error: 'User not found' });
 
-          // Update user_profiles table (username and full_name)
-          db.run('UPDATE user_profiles SET username = ?, full_name = ? WHERE username = ?', [username, full_name || '', currentUsername], function(errProfile) {
-            res.json({ message: 'Profile updated successfully', newUsername: username, newEmail: email });
-          });
-        });
-      });
+      // Update user_profiles table (username and full_name)
+      await db.query('UPDATE user_profiles SET username = $1, full_name = $2 WHERE username = $3', [username, full_name || '', currentUsername]);
+      res.json({ message: 'Profile updated successfully', newUsername: username, newEmail: email });
     }
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // =====================================================
@@ -870,31 +901,34 @@ app.post('/api/ai/analyze', async (req, res) => {
 // SCRAPER LOGS API
 // =====================================================
 
-app.get('/api/scraper/logs', (req, res) => {
-  db.all('SELECT * FROM scraper_logs ORDER BY started_at DESC LIMIT 20', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+app.get('/api/scraper/logs', async (req, res) => {
+  try {
+    const result = await db.query('SELECT * FROM scraper_logs ORDER BY started_at DESC LIMIT 20');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/scraper/trigger', (req, res) => {
-  // Mocking a scraper trigger event
-  const sources = ['MyScheme.gov.in', 'India.gov.in', 'PIB.gov.in', 'National Scholarship Portal'];
-  const source = sources[Math.floor(Math.random() * sources.length)];
-  const found = Math.floor(Math.random() * 10);
-  const updated = Math.floor(Math.random() * 5);
-  const statuses = ['SUCCESS', 'SUCCESS', 'SUCCESS', 'FAILED'];
-  const status = statuses[Math.floor(Math.random() * statuses.length)];
-  const errMsg = status === 'FAILED' ? 'Connection timeout' : null;
+app.post('/api/scraper/trigger', async (req, res) => {
+  try {
+    // Mocking a scraper trigger event
+    const sources = ['MyScheme.gov.in', 'India.gov.in', 'PIB.gov.in', 'National Scholarship Portal'];
+    const source = sources[Math.floor(Math.random() * sources.length)];
+    const found = Math.floor(Math.random() * 10);
+    const updated = Math.floor(Math.random() * 5);
+    const statuses = ['SUCCESS', 'SUCCESS', 'SUCCESS', 'FAILED'];
+    const status = statuses[Math.floor(Math.random() * statuses.length)];
+    const errMsg = status === 'FAILED' ? 'Connection timeout' : null;
 
-  db.run(
-    'INSERT INTO scraper_logs (source_name, status, schemes_found, schemes_updated, error_message, completed_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-    [source, status, found, updated, errMsg],
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ message: 'Scrape job completed successfully', logId: this.lastID });
-    }
-  );
+    const result = await db.query(
+      'INSERT INTO scraper_logs (source_name, status, schemes_found, schemes_updated, error_message, completed_at) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP) RETURNING id',
+      [source, status, found, updated, errMsg]
+    );
+    res.json({ message: 'Scrape job completed successfully', logId: result.rows[0].id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 const PORT = process.env.PORT || 5000;

@@ -17,92 +17,12 @@ const pool = new Pool({
   },
 });
 
-// Helper: Convert SQLite ? parameter placeholders to PostgreSQL $1, $2, $3...
-function convertSql(sql) {
-  let index = 1;
-  return sql.replace(/\?/g, () => `$${index++}`);
-}
-
-// Wrapper object mimicking sqlite3 Database API
+// Wrapper object mimicking native PostgreSQL query interface
 const db = {
   pool,
-  // Query multiple rows: db.all(sql, params, callback)
-  all(sql, params = [], callback) {
-    if (typeof params === 'function') {
-      callback = params;
-      params = [];
-    }
-    if (!Array.isArray(params)) {
-      params = [params];
-    }
-
-    const converted = convertSql(sql);
-    pool
-      .query(converted, params)
-      .then((res) => {
-        if (callback) callback(null, res.rows);
-      })
-      .catch((err) => {
-        console.error('[DB all Error]:', err.message, '\nQuery:', sql, '\nParams:', params);
-        if (callback) callback(err, null);
-      });
-  },
-
-  // Query a single row: db.get(sql, params, callback)
-  get(sql, params = [], callback) {
-    if (typeof params === 'function') {
-      callback = params;
-      params = [];
-    }
-    if (!Array.isArray(params)) {
-      params = [params];
-    }
-
-    const converted = convertSql(sql);
-    pool
-      .query(converted, params)
-      .then((res) => {
-        const row = res.rows[0] || null;
-        if (callback) callback(null, row);
-      })
-      .catch((err) => {
-        console.error('[DB get Error]:', err.message, '\nQuery:', sql, '\nParams:', params);
-        if (callback) callback(err, null);
-      });
-  },
-
-  // Execute queries (insert, update, delete): db.run(sql, params, callback)
-  // Inside callback, "this" context includes lastID and changes
-  run(sql, params = [], callback) {
-    if (typeof params === 'function') {
-      callback = params;
-      params = [];
-    }
-    if (!Array.isArray(params)) {
-      params = [params];
-    }
-
-    let converted = convertSql(sql);
-    const isInsert = converted.trim().toLowerCase().startsWith('insert');
-
-    // Emulate lastID in PostgreSQL by adding RETURNING id if it's an INSERT statement
-    if (isInsert && !converted.toLowerCase().includes('returning')) {
-      converted += ' RETURNING id';
-    }
-
-    pool
-      .query(converted, params)
-      .then((res) => {
-        const lastID = isInsert && res.rows[0] ? res.rows[0].id : null;
-        const changes = res.rowCount;
-        const context = { lastID, changes };
-        if (callback) callback.call(context, null);
-      })
-      .catch((err) => {
-        console.error('[DB run Error]:', err.message, '\nQuery:', sql, '\nParams:', params);
-        if (callback) callback.call({}, err);
-      });
-  },
+  query(text, params) {
+    return pool.query(text, params);
+  }
 };
 
 // Initialize database schema (PostgreSQL dialect)
