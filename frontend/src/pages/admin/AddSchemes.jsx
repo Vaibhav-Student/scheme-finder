@@ -47,23 +47,37 @@ export default function AddSchemes() {
     e.preventDefault();
     setLoading(true);
 
+    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const url = `${baseUrl}/api/schemes`;
+
     try {
-      await fetch((import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/schemes', {
+      // Split required documents into an array by newline
+      const docsArray = form.required_documents
+        ? form.required_documents.split('\n').map(d => d.trim()).filter(Boolean)
+        : [];
+
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
+          required_documents: docsArray,
           scheme_type: form.scheme_type || 'General Scheme',
           is_active: form.is_active !== false,
         })
       });
 
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server responded with ${res.status}`);
+      }
+
       toast.success('Scheme saved successfully to Database!');
       setForm({
-        ...form, name: '', description: '', benefits: '', apply_link: ''
+        ...form, name: '', description: '', benefits: '', apply_link: '', required_documents: ''
       });
     } catch (err) {
-      toast.error('Failed to save scheme. Please check database connection.');
+      toast.error(`Failed to save scheme: ${err.message}. (Requested URL: ${url})`);
       console.error(err);
     } finally {
       setLoading(false);
@@ -191,6 +205,11 @@ export default function AddSchemes() {
             <div className="input-group">
               <label>Benefits *</label>
               <textarea className="input-field" rows={2} required value={form.benefits} onChange={(e) => updateField('benefits', e.target.value)} placeholder="What does this scheme provide?" />
+            </div>
+
+            <div className="input-group">
+              <label>Required Documents (one per line)</label>
+              <textarea className="input-field" rows={2} value={form.required_documents} onChange={(e) => updateField('required_documents', e.target.value)} placeholder="e.g. Aadhaar Card&#10;Income Certificate" />
             </div>
 
             <div className="input-group">

@@ -39,8 +39,11 @@ export default function ReviewSchemes() {
   const handleMarkResearched = async (id) => {
     const item = schemes.find(s => s.id === id);
     if (item) {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const saveUrl = `${baseUrl}/api/schemes`;
+      const deleteUrl = `${baseUrl}/api/review/${id}`;
       try {
-        await fetch((import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/schemes', {
+        const saveRes = await fetch(saveUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -56,25 +59,42 @@ export default function ReviewSchemes() {
           })
         });
 
+        if (!saveRes.ok) {
+          const errorData = await saveRes.json().catch(() => ({}));
+          throw new Error(errorData.error || `Server responded with ${saveRes.status} on save`);
+        }
+
         // Delete from review queue
-        await fetch(`${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/review/${id}`, { method: 'DELETE' });
+        const deleteRes = await fetch(deleteUrl, { method: 'DELETE' });
+        if (!deleteRes.ok) {
+          const errorData = await deleteRes.json().catch(() => ({}));
+          throw new Error(errorData.error || `Server responded with ${deleteRes.status} on queue delete`);
+        }
 
         setSchemes(schemes.filter(s => s.id !== id));
         toast.success('Marked as done & added to Active Schemes Database!');
       } catch (err) {
-        toast.error('Database error.');
+        toast.error(`Database error: ${err.message}. (Requested URLs: ${saveUrl} / ${deleteUrl})`);
+        console.error(err);
       }
     }
   };
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to discard this item?')) {
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const deleteUrl = `${baseUrl}/api/review/${id}`;
       try {
-        await fetch(`${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/review/${id}`, { method: 'DELETE' });
+        const res = await fetch(deleteUrl, { method: 'DELETE' });
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.error || `Server responded with ${res.status}`);
+        }
         setSchemes(schemes.filter(s => s.id !== id));
         toast.info('Item discarded from queue.');
       } catch (err) {
-        toast.error('Failed to delete item.');
+        toast.error(`Failed to delete item: ${err.message}. (Requested URL: ${deleteUrl})`);
+        console.error(err);
       }
     }
   };
