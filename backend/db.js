@@ -148,7 +148,7 @@ async function initDb() {
         id SERIAL PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
         email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
+        password TEXT DEFAULT '',
         is_suspended SMALLINT DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -208,6 +208,81 @@ async function initDb() {
         "INSERT INTO admins (username, password, email, full_name) VALUES ('admin', 'admin@123', 'admin@example.com', 'System Admin')"
       );
       console.log('Seeded default admin user successfully.');
+    }
+
+    // 7. Migration: Ensure password column is nullable in existing databases
+    try {
+      await pool.query('ALTER TABLE users ALTER COLUMN password DROP NOT NULL');
+      await pool.query("ALTER TABLE users ALTER COLUMN password SET DEFAULT ''");
+    } catch (e) {
+      // Ignored if table already updated or doesn't support ALTER
+    }
+
+    // 8. Supabase Auth Sync Trigger & Function
+    try {
+      // Create the trigger handler function in the public schema
+      await pool.query(`
+        CREATE OR REPLACE FUNCTION public.handle_new_user()
+        RETURNS trigger AS $$
+        BEGIN
+          INSERT INTO public.users (username, email, password, is_suspended)
+          VALUES (
+            COALESCE(new.raw_user_meta_data->>'username', new.email),
+            new.email,
+            '',
+            0
+          )
+          ON CONFLICT (username) DO NOTHING;
+          
+          INSERT INTO public.user_profiles (username, full_name, updated_at)
+          VALUES (
+            COALESCE(new.raw_user_meta_data->>'username', new.email),
+            COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'username', new.email),
+            now()
+          )
+          ON CONFLICT (username) DO NOTHING;
+
+          RETURN new;
+        END;
+        $$ LANGUAGE plpgsql SECURITY DEFINER;
+      `);
+
+      // Attach trigger to the auth.users table (which contains Supabase registrations)
+      await pool.query('DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;');
+      await pool.query(`
+        CREATE TRIGGER on_auth_user_created
+          AFTER INSERT ON auth.users
+          FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+      `);
+      console.log('Configured Supabase auth.users sync trigger successfully.');
+    } catch (e) {
+      console.warn('Warning: Could not configure Supabase sync trigger (this is normal if not running on Supabase with admin permissions):', e.message);
+    }
+
+    // 9. Backfill any existing users from auth.users to public tables
+    try {
+      await pool.query(`
+        INSERT INTO public.users (username, email, password, is_suspended)
+        SELECT 
+          COALESCE(raw_user_meta_data->>'username', email),
+          email,
+          '',
+          0
+        FROM auth.users
+        ON CONFLICT (username) DO NOTHING;
+      `);
+      await pool.query(`
+        INSERT INTO public.user_profiles (username, full_name, updated_at)
+        SELECT 
+          COALESCE(raw_user_meta_data->>'username', email),
+          COALESCE(raw_user_meta_data->>'full_name', raw_user_meta_data->>'username', email),
+          now()
+        FROM auth.users
+        ON CONFLICT (username) DO NOTHING;
+      `);
+      console.log('Synced existing users from auth.users successfully.');
+    } catch (e) {
+      // Ignored if auth.users is not queryable directly
     }
 
     console.log('Database initialized successfully.');

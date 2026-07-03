@@ -12,7 +12,7 @@ export default function ViewUsers() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/users');
+      const res = await fetch((import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/users');
       const data = await res.json();
       setUsers(Array.isArray(data) ? data : []);
     } catch {
@@ -30,7 +30,7 @@ export default function ViewUsers() {
     if (!window.confirm(`Are you sure you want to ${actionStr} this user?`)) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/users/${id}/suspend`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/users/${id}/suspend`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ suspend: !currentStatus })

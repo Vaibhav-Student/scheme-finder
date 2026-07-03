@@ -4,7 +4,7 @@ import { FiArrowLeft, FiExternalLink, FiCalendar, FiCheckCircle, FiFileText, FiA
 import TextToSpeech from '../components/TextToSpeech';
 import './SchemeDetail.css';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api';
 
 function getDaysRemaining(dateStr) {
   if (!dateStr) return null;

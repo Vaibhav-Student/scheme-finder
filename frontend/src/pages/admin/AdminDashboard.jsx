@@ -14,8 +14,8 @@ export default function AdminDashboard() {
       try {
         const [scraperRes, usersRes, usersListRes] = await Promise.allSettled([
           API.get('/scraper/logs/'),
-          fetch('http://localhost:5000/api/users/count').then(r => r.json()),
-          fetch('http://localhost:5000/api/users').then(r => r.json())
+          fetch((import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/users/count').then(r => r.json()),
+          fetch((import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/users').then(r => r.json())
         ]);
 
         const logs = scraperRes.status === 'fulfilled' ? (Array.isArray(scraperRes.value.data) ? scraperRes.value.data : scraperRes.value.data.results || []) : [];

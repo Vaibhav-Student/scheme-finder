@@ -14,7 +14,7 @@ export default function ReviewSchemes() {
 
   const loadSchemes = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/review');
+      const res = await fetch((import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/review');
       const data = await res.json();
       setSchemes(data);
     } catch (err) {
@@ -33,7 +33,7 @@ export default function ReviewSchemes() {
     const item = schemes.find(s => s.id === id);
     if (item) {
       try {
-        await fetch('http://localhost:5000/api/schemes', {
+        await fetch((import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/schemes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -50,7 +50,7 @@ export default function ReviewSchemes() {
         });
 
         // Delete from review queue
-        await fetch(`http://localhost:5000/api/review/${id}`, { method: 'DELETE' });
+        await fetch(`${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/review/${id}`, { method: 'DELETE' });
 
         setSchemes(schemes.filter(s => s.id !== id));
         toast.success('Marked as done & added to Active Schemes Database!');
@@ -63,7 +63,7 @@ export default function ReviewSchemes() {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to discard this item?')) {
       try {
-        await fetch(`http://localhost:5000/api/review/${id}`, { method: 'DELETE' });
+        await fetch(`${import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/review/${id}`, { method: 'DELETE' });
         setSchemes(schemes.filter(s => s.id !== id));
         toast.info('Item discarded from queue.');
       } catch (err) {

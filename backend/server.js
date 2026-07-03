@@ -424,7 +424,7 @@ app.post('/api/profile', (req, res) => {
 
 app.get('/api/profile/:username', (req, res) => {
   const username = req.params.username;
-  db.get('SELECT username, email, password, full_name FROM admins WHERE username = ?', [username], (err, admin) => {
+  db.get('SELECT username, email, password, full_name FROM admins WHERE username = ? OR email = ?', [username, username], (err, admin) => {
     if (err) return res.status(500).json({ error: err.message });
     if (admin) {
       return res.json({
@@ -435,18 +435,21 @@ app.get('/api/profile/:username', (req, res) => {
       });
     }
 
-    db.get('SELECT u.username, u.email, u.password, p.* FROM users u LEFT JOIN user_profiles p ON u.username = p.username WHERE u.username = ?', [username], (err, user) => {
+    db.get('SELECT u.username, u.email, u.is_suspended, p.* FROM users u LEFT JOIN user_profiles p ON u.username = p.username WHERE u.username = ?', [username], (err, user) => {
       if (err) return res.status(500).json({ error: err.message });
-      if (!user) {
-        // Fallback for Supabase users who don't exist in the local SQLite users table
-        db.get('SELECT * FROM user_profiles WHERE username = ?', [username], (err2, profile) => {
-          if (err2) return res.status(500).json({ error: err2.message });
-          if (!profile) return res.status(404).json({ error: 'Profile not found' });
-          res.json({ username, email: '', password: '', ...profile });
-        });
-        return;
+      if (user) {
+        if (user.is_suspended === 1) {
+          return res.status(403).json({ error: 'suspended', message: 'Your account has been suspended by the administrator.' });
+        }
+        return res.json(user);
       }
-      res.json(user);
+
+      // Fallback for Supabase users who don't exist in the local public users table yet
+      db.get('SELECT * FROM user_profiles WHERE username = ?', [username], (err2, profile) => {
+        if (err2) return res.status(500).json({ error: err2.message });
+        if (!profile) return res.status(404).json({ error: 'Profile not found' });
+        res.json({ username, email: '', password: '', is_suspended: 0, ...profile });
+      });
     });
   });
 });
@@ -483,7 +486,7 @@ app.post('/api/auth/register', (req, res) => {
 
   db.run(`INSERT INTO users (username, email, password) VALUES (?, ?, ?)`, [username, email, password], function(err) {
     if (err) {
-      if (err.message.includes('UNIQUE constraint failed')) {
+      if (err.message.includes('UNIQUE constraint failed') || err.message.includes('duplicate key') || err.code === '23505') {
         return res.status(400).json({ error: 'Username or Email already exists' });
       }
       return res.status(500).json({ error: err.message });
@@ -496,10 +499,10 @@ app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
   
   // Check admin first
-  db.get('SELECT * FROM admins WHERE username = ? AND password = ?', [username, password], (err, admin) => {
+  db.get('SELECT * FROM admins WHERE (username = ? OR email = ?) AND password = ?', [username, username, password], (err, admin) => {
     if (err) return res.status(500).json({ error: err.message });
     if (admin) {
-      return res.json({ token: 'mock-admin-token-123', role: 'admin', user: { username } });
+      return res.json({ token: 'mock-admin-token-123', role: 'admin', user: { username: admin.username } });
     }
 
     // Check user
@@ -547,7 +550,7 @@ app.put('/api/users/update', (req, res) => {
   }
 
   // Check if admin
-  db.get('SELECT * FROM admins WHERE username = ?', [currentUsername], (err, admin) => {
+  db.get('SELECT * FROM admins WHERE username = ? OR email = ?', [currentUsername, currentUsername], (err, admin) => {
     if (err) return res.status(500).json({ error: err.message });
     
     if (admin) {
@@ -557,8 +560,8 @@ app.put('/api/users/update', (req, res) => {
         adminSql += ', password = ?';
         adminParams.push(password);
       }
-      adminSql += ' WHERE username = ?';
-      adminParams.push(currentUsername);
+      adminSql += ' WHERE username = ? OR email = ?';
+      adminParams.push(currentUsername, currentUsername);
 
       db.run(adminSql, adminParams, function(err) {
         if (err) return res.status(500).json({ error: err.message });

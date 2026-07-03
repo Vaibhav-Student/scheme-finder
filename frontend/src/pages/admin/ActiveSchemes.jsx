@@ -19,7 +19,7 @@ export default function ActiveSchemes() {
       // 1. Fetch from SQLite backend
       let apiSchemes = [];
       try {
-        const res = await fetch('http://localhost:5000/api/schemes');
+        const res = await fetch((import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/schemes');
         const data = await res.json();
         apiSchemes = Array.isArray(data) ? data : [];
       } catch {

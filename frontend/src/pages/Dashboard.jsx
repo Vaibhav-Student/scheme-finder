@@ -5,7 +5,7 @@ import TextToSpeech from '../components/TextToSpeech';
 import { useAuth } from '../context/AuthContext';
 import './Dashboard.css';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api';
 
 const SCHEME_TYPES = [
   { label: 'All',                  emoji: '🏠' },
