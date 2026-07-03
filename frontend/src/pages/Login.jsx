@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { toast } from 'react-toastify';
 import {
   FiEye, FiEyeOff, FiArrowRight,
-  FiUser, FiLock, FiAlertCircle,
+  FiUser, FiLock, FiAlertCircle, FiMail,
 } from 'react-icons/fi';
 import { HiSparkles } from 'react-icons/hi2';
 import './Auth.css';
@@ -12,6 +12,10 @@ import './Auth.css';
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+
+  // Toggle between "User" and "Admin" login modes
+  const [mode, setMode] = useState('user'); // 'user' | 'admin'
+  const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,8 +24,17 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username.trim() || !password) {
-      setError('Please fill in all fields');
+
+    if (mode === 'user' && !email.trim()) {
+      setError('Please enter your email');
+      return;
+    }
+    if (mode === 'admin' && !username.trim()) {
+      setError('Please enter your username');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password');
       return;
     }
 
@@ -29,7 +42,8 @@ export default function Login() {
     setError('');
 
     try {
-      const response = await login(username, password);
+      const credential = mode === 'admin' ? username : email;
+      const response = await login(credential, password);
       if (response.role === 'admin') {
         navigate('/admin');
       } else {
@@ -64,6 +78,44 @@ export default function Login() {
               <p className="auth-subtitle">Sign in to manage your schemes</p>
             </div>
 
+            {/* Mode toggle tabs */}
+            <div style={{
+              display: 'flex', gap: '0.5rem', marginBottom: '1.25rem',
+              background: 'rgba(255,255,255,0.04)', borderRadius: '0.6rem',
+              padding: '0.3rem', border: '1px solid rgba(255,255,255,0.06)'
+            }}>
+              <button
+                type="button"
+                onClick={() => { setMode('user'); setError(''); }}
+                style={{
+                  flex: 1, padding: '0.55rem 0', borderRadius: '0.45rem',
+                  border: 'none', cursor: 'pointer', fontWeight: 600,
+                  fontSize: '0.82rem', transition: 'all 0.2s',
+                  background: mode === 'user'
+                    ? 'linear-gradient(135deg, #6366F1, #818cf8)'
+                    : 'transparent',
+                  color: mode === 'user' ? '#fff' : 'rgba(255,255,255,0.5)',
+                }}
+              >
+                User Login
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMode('admin'); setError(''); }}
+                style={{
+                  flex: 1, padding: '0.55rem 0', borderRadius: '0.45rem',
+                  border: 'none', cursor: 'pointer', fontWeight: 600,
+                  fontSize: '0.82rem', transition: 'all 0.2s',
+                  background: mode === 'admin'
+                    ? 'linear-gradient(135deg, #6366F1, #818cf8)'
+                    : 'transparent',
+                  color: mode === 'admin' ? '#fff' : 'rgba(255,255,255,0.5)',
+                }}
+              >
+                Admin Login
+              </button>
+            </div>
+
             <div className="auth-divider"></div>
 
             {/* Error Alert */}
@@ -77,25 +129,49 @@ export default function Login() {
             {/* Form */}
             <form className="auth-form" onSubmit={handleSubmit} noValidate>
 
-              {/* Username Input */}
-              <div className="input-group">
-                <label htmlFor="username">Username</label>
-                <div className="input-icon-wrapper">
-                  <span className="input-icon">
-                    <FiUser size={16} />
-                  </span>
-                  <input
-                    id="username"
-                    type="text"
-                    className="input-field"
-                    placeholder="Enter your username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    autoComplete="username"
-                    required
-                  />
+              {/* Email input (user mode) */}
+              {mode === 'user' && (
+                <div className="input-group">
+                  <label htmlFor="email">Email Address</label>
+                  <div className="input-icon-wrapper">
+                    <span className="input-icon">
+                      <FiMail size={16} />
+                    </span>
+                    <input
+                      id="email"
+                      type="email"
+                      className="input-field"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      autoComplete="email"
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* Username input (admin mode) */}
+              {mode === 'admin' && (
+                <div className="input-group">
+                  <label htmlFor="username">Username</label>
+                  <div className="input-icon-wrapper">
+                    <span className="input-icon">
+                      <FiUser size={16} />
+                    </span>
+                    <input
+                      id="username"
+                      type="text"
+                      className="input-field"
+                      placeholder="Enter admin username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      autoComplete="username"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Password Input */}
               <div className="input-group">

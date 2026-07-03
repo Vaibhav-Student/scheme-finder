@@ -92,13 +92,7 @@ export default function Signup() {
       toast.success('Account created! Please sign in.');
       navigate('/login');
     } catch (err) {
-      const data = err.response?.data;
-      if (data && typeof data === 'object') {
-        const firstError = Object.values(data).flat()[0];
-        toast.error(firstError || 'Registration failed.');
-      } else {
-        toast.error('Registration failed. Please try again.');
-      }
+      toast.error(err.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }

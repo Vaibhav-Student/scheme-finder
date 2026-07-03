@@ -1,80 +1,157 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import API from '../api/axios';
+import { supabase } from '../lib/supabaseClient';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('access_token'));
+  const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const isAuthenticated = !!token && !!user;
-  const isAdmin = user?.is_admin || user?.is_staff || user?.is_superuser || false;
+  const isAuthenticated = !!user;
+  const isAdmin = user?.is_admin || false;
 
-  const fetchProfile = useCallback(async () => {
-    // Currently relying on localStorage for profile data
-    const userData = localStorage.getItem('user_data');
-    if (userData) {
-      setUser(JSON.parse(userData));
-    } else {
-      setUser(null);
-    }
-  }, []);
+  // Derive a normalised user object from a Supabase session
+  const buildUserFromSession = (session) => {
+    if (!session?.user) return null;
+    const meta = session.user.user_metadata || {};
+    return {
+      username: meta.username || session.user.email,
+      email: session.user.email,
+      is_admin: false,
+    };
+  };
 
+  // ----- Bootstrap: restore session on mount -----
   useEffect(() => {
     const initAuth = async () => {
-      const storedToken = localStorage.getItem('access_token');
-      if (storedToken) {
-        setToken(storedToken);
-        await fetchProfile();
+      // Check for an admin stored in localStorage (admin login goes through backend)
+      const adminData = localStorage.getItem('admin_user_data');
+      if (adminData) {
+        try {
+          setUser(JSON.parse(adminData));
+          setToken(localStorage.getItem('admin_access_token'));
+          setIsLoading(false);
+          return;
+        } catch { /* fall through */ }
+      }
+
+      // Otherwise try Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setUser(buildUserFromSession(session));
+        setToken(session.access_token);
       }
       setIsLoading(false);
     };
+
     initAuth();
-  }, [fetchProfile]);
 
-  const login = async (username, password) => {
-    const res = await fetch('http://localhost:5000/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Invalid credentials');
-    
-    localStorage.setItem('access_token', data.token);
-    localStorage.setItem('user_data', JSON.stringify({ ...data.user, is_admin: data.role === 'admin' }));
-    setToken(data.token);
-    await fetchProfile();
-    return data;
+    // Listen for auth state changes (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        // Don't overwrite admin session
+        if (localStorage.getItem('admin_user_data')) return;
+
+        if (session) {
+          setUser(buildUserFromSession(session));
+          setToken(session.access_token);
+        } else {
+          setUser(null);
+          setToken(null);
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const checkSupabaseConfig = () => {
+    const url = import.meta.env.VITE_SUPABASE_URL;
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    if (!url || !key || url.includes('your-project') || key.includes('your-anon-key')) {
+      throw new Error('Supabase is not configured. Please add your real VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the frontend/.env file.');
+    }
   };
 
+  // ----- Login (regular user via Supabase, admin via backend) -----
+  const login = async (emailOrUsername, password) => {
+    // Try admin login via backend first
+    try {
+      const res = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: emailOrUsername, password }),
+      });
+      const data = await res.json();
+      if (res.ok && data.role === 'admin') {
+        const adminUser = { username: data.user.username, is_admin: true };
+        localStorage.setItem('admin_access_token', data.token);
+        localStorage.setItem('admin_user_data', JSON.stringify(adminUser));
+        setToken(data.token);
+        setUser(adminUser);
+        return data;
+      }
+    } catch {
+      // Backend unreachable — continue to Supabase
+    }
+
+    // Regular user login via Supabase (uses email)
+    checkSupabaseConfig();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: emailOrUsername,
+      password,
+    });
+
+    if (error) throw new Error(error.message);
+
+    const sessionUser = buildUserFromSession(data.session);
+    setUser(sessionUser);
+    setToken(data.session.access_token);
+
+    return { role: 'user', user: sessionUser };
+  };
+
+  // ----- Signup (regular user via Supabase) -----
   const signup = async (email, username, password) => {
-    const res = await fetch('http://localhost:5000/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, username, password })
+    checkSupabaseConfig();
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { username },        // stored in user_metadata
+      },
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Registration failed');
+
+    if (error) throw new Error(error.message);
     return data;
   };
 
-  const logout = useCallback(() => {
+  // ----- Logout -----
+  const logout = useCallback(async () => {
+    // Clear admin session if present
+    localStorage.removeItem('admin_access_token');
+    localStorage.removeItem('admin_user_data');
+
+    // Also clear legacy keys (from old code)
     localStorage.removeItem('access_token');
     localStorage.removeItem('user_data');
+
+    await supabase.auth.signOut();
     setToken(null);
     setUser(null);
   }, []);
 
-  const refreshToken = async () => {
-    const refresh = localStorage.getItem('refresh_token');
-    if (!refresh) throw new Error('No refresh token');
-    const { data } = await API.post('/auth/token/refresh/', { refresh });
-    localStorage.setItem('access_token', data.access);
-    setToken(data.access);
-    return data.access;
-  };
+  // ----- Fetch profile (kept for backward compatibility) -----
+  const fetchProfile = useCallback(async () => {
+    // For admin, profile is already in state
+    if (user?.is_admin) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      setUser(buildUserFromSession(session));
+    }
+  }, [user]);
 
   const value = {
     user,
@@ -85,7 +162,6 @@ export function AuthProvider({ children }) {
     login,
     signup,
     logout,
-    refreshToken,
     fetchProfile,
   };
 
