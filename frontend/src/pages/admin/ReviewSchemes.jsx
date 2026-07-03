@@ -15,11 +15,15 @@ export default function ReviewSchemes() {
   const loadSchemes = async () => {
     try {
       const res = await fetch((import.meta.env.VITE_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api/review');
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
       const data = await res.json();
-      setSchemes(data);
+      setSchemes(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
       toast.error('Failed to load review queue from DB');
+      setSchemes([]);
     }
   };
 
