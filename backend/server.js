@@ -53,13 +53,29 @@ app.post('/api/schemes', (req, res) => {
   const { name, description, benefits, required_documents, apply_link, last_date, ministry, scheme_type, is_active, eligibility, source_url } = req.body;
   const sql = `INSERT INTO schemes (name, description, benefits, required_documents, apply_link, last_date, ministry, scheme_type, is_active, eligibility, source_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   
-  const eligibilityStr = typeof eligibility === 'object' ? JSON.stringify(eligibility) : eligibility;
-  const docsStr = typeof required_documents === 'object' ? JSON.stringify(required_documents) : required_documents;
+  const eligibilityStr = typeof eligibility === 'object' ? JSON.stringify(eligibility) : (eligibility || '{}');
+  const docsStr = typeof required_documents === 'object' ? JSON.stringify(required_documents) : (required_documents || '[]');
 
-  db.run(sql, [name, description, benefits, docsStr, apply_link, last_date, ministry, scheme_type, is_active ? 1 : 0, eligibilityStr, source_url || ''], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, message: 'Scheme created successfully' });
-  });
+  db.run(
+    sql, 
+    [
+      name || '', 
+      description || '', 
+      benefits || '', 
+      docsStr, 
+      apply_link || '', 
+      last_date || '', 
+      ministry || '', 
+      scheme_type || '', 
+      is_active ? 1 : 0, 
+      eligibilityStr, 
+      source_url || ''
+    ], 
+    function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID, message: 'Scheme created successfully' });
+    }
+  );
 });
 
 app.put('/api/schemes/:id/deactivate', (req, res) => {
@@ -82,14 +98,31 @@ app.put('/api/schemes/:id', (req, res) => {
   const { name, description, benefits, required_documents, apply_link, last_date, ministry, scheme_type, is_active, eligibility, source_url } = req.body;
   const sql = `UPDATE schemes SET name=?, description=?, benefits=?, required_documents=?, apply_link=?, last_date=?, ministry=?, scheme_type=?, is_active=?, eligibility=?, source_url=? WHERE id=?`;
   
-  const eligibilityStr = typeof eligibility === 'object' ? JSON.stringify(eligibility) : eligibility;
-  const docsStr = typeof required_documents === 'object' ? JSON.stringify(required_documents) : required_documents;
+  const eligibilityStr = typeof eligibility === 'object' ? JSON.stringify(eligibility) : (eligibility || '{}');
+  const docsStr = typeof required_documents === 'object' ? JSON.stringify(required_documents) : (required_documents || '[]');
 
-  db.run(sql, [name, description, benefits, docsStr, apply_link, last_date, ministry, scheme_type, is_active ? 1 : 0, eligibilityStr, source_url || '', req.params.id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Scheme not found' });
-    res.json({ message: 'Scheme updated successfully' });
-  });
+  db.run(
+    sql, 
+    [
+      name || '', 
+      description || '', 
+      benefits || '', 
+      docsStr, 
+      apply_link || '', 
+      last_date || '', 
+      ministry || '', 
+      scheme_type || '', 
+      is_active ? 1 : 0, 
+      eligibilityStr, 
+      source_url || '', 
+      req.params.id
+    ], 
+    function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      if (this.changes === 0) return res.status(404).json({ error: 'Scheme not found' });
+      res.json({ message: 'Scheme updated successfully' });
+    }
+  );
 });
 
 app.delete('/api/schemes/:id', (req, res) => {
@@ -413,9 +446,20 @@ app.post('/api/profile', (req, res) => {
       udid_number=excluded.udid_number, extra_fields=excluded.extra_fields, updated_at=CURRENT_TIMESTAMP`;
 
   db.run(sql, [
-    username, full_name, age, gender, has_disability ? 1 : 0, 
-    disability_type || null, disability_percentage || 0, state, district, 
-    category, family_income || null, education_level, udid_number || null, extraFieldsStr || null
+    username, 
+    full_name, 
+    age || null, 
+    gender || null, 
+    has_disability ? 1 : 0, 
+    disability_type || null, 
+    disability_percentage || 0, 
+    state || null, 
+    district || null, 
+    category || null, 
+    family_income || null, 
+    education_level || null, 
+    udid_number || null, 
+    extraFieldsStr || null
   ], function(err) {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Profile saved successfully', id: this.lastID || this.changes });
@@ -466,10 +510,24 @@ app.post('/api/review', (req, res) => {
   const { headline, content, name, source_url, source_name, ai_confidence, ai_reason, verification_status, official_portal } = req.body;
   const sql = `INSERT INTO review_queue (headline, content, name, source_url, source_name, ai_confidence, ai_reason, verification_status, official_portal) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   
-  db.run(sql, [headline, content, name, source_url, source_name, ai_confidence, ai_reason, verification_status, official_portal], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, ...req.body });
-  });
+  db.run(
+    sql, 
+    [
+      headline || '', 
+      content || null, 
+      name || null, 
+      source_url || null, 
+      source_name || null, 
+      ai_confidence || 0, 
+      ai_reason || null, 
+      verification_status || null, 
+      official_portal || null
+    ], 
+    function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID, ...req.body });
+    }
+  );
 });
 
 app.delete('/api/review/:id', (req, res) => {
